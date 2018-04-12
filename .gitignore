@@ -2,3 +2,5 @@
 *.visit 
 *.exe 
 make.inc
+obj/
+dep/
