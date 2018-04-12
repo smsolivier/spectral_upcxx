@@ -23,21 +23,25 @@ void FFT1D::transform(cdouble* input, int N, int stride, int DIR) {
 	fftw_plan plan; 
 	fftw_complex* in; 
 	in = reinterpret_cast<fftw_complex*>(input); 
-	plan = fftw_plan_many_dft(
-		1, // dimension of FFT 
-		&N, // size of array 
-		1, // number of FFTs 
-		in, // input pointer 
-		NULL, // inembed 
-		stride, // input stride 
-		0, // idist 
-		in, // output pointer 
-		NULL, // onembed 
-		stride, // output stride 
-		0, // odist 
-		DIR, // transform sign 
-		FFTW_ESTIMATE // FFTW flags 
-		); 
+	#pragma omp critical 
+	{
+		plan = fftw_plan_many_dft(
+			1, // dimension of FFT 
+			&N, // size of array 
+			1, // number of FFTs 
+			in, // input pointer 
+			NULL, // inembed 
+			stride, // input stride 
+			0, // idist 
+			in, // output pointer 
+			NULL, // onembed 
+			stride, // output stride 
+			0, // odist 
+			DIR, // transform sign 
+			FFTW_ESTIMATE // FFTW flags 
+			); 
+		
+	}
 	fftw_execute(plan); 
 	fftw_destroy_plan(plan); 
 }
