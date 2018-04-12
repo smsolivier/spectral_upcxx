@@ -1,8 +1,6 @@
 #include "Dist3D.H" 
 #include <iostream>
 
-#define SERIAL 
-
 Dist3D::Dist3D() {}
 Dist3D::~Dist3D() {
 	upcxx::delete_(m_ptrs[upcxx::rank_me()]); 
@@ -31,9 +29,6 @@ void Dist3D::init(array<int,DIM> N) {
 	// allocate memory for the slab (truncated in z) 
 	m_ptrs[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize); 
 	m_local = m_ptrs[upcxx::rank_me()].local(); 
-	for (int i=0; i<m_dSize; i++) {
-		m_local[i] = upcxx::rank_me(); 
-	}
 
 	// broadcast pointer address to other ranks 
 	for (int i=0; i<upcxx::rank_n(); i++) {
@@ -93,7 +88,6 @@ void Dist3D::transform(int DIR) {
 	}
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
-	upcxx::barrier(); 
 	// Nz*Nx transforms of length Ny 
 	for (int k=0; k<m_Nz; k++) {
 		for (int i=0; i<m_dims[0]; i++) {
