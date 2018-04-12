@@ -134,7 +134,11 @@ void Dist3D::transform(int DIR) {
 		int rem = k % m_Nz; 
 		int dest = upcxx::rank_me()*Ny*m_dims[0] + 
 			rem*m_dims[0]*m_dims[1]; 
-		upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny); 
+		if (send_to == upcxx::rank_me()) {
+			memcpy(m_local+dest, slab, m_dims[0]*Ny*sizeof(cdouble)); 
+		} else {
+			upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny); 			
+		}
 	}
 	upcxx::barrier(); 
 
