@@ -20,6 +20,8 @@ public:
 	Dist3D(); 
 	/// constructor 
 	Dist3D(array<int,DIM> N); 
+	/// destructor 
+	~Dist3D(); 
 	/// initialize the array after calling default constructor 
 	void init(array<int,DIM> N); 
 	/// set a value in the distributed array 

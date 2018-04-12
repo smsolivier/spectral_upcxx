@@ -4,6 +4,9 @@
 #define SERIAL 
 
 Dist3D::Dist3D() {}
+Dist3D::~Dist3D() {
+	upcxx::delete_(m_ptrs[upcxx::rank_me()]); 
+}
 
 Dist3D::Dist3D(array<int,DIM> N) {
 	init(N); 
@@ -70,7 +73,7 @@ void Dist3D::inverse() {
 	transform(-1); 
 
 	// divide by N^3 
-	for (int i=0; i<m_N; i++) {
+	for (int i=0; i<m_dSize; i++) {
 		m_local[i] /= m_N; 
 	}
 }
