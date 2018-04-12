@@ -2,7 +2,11 @@ HOME = .
 
 include $(HOME)/make.inc
 
-CFLAGS += -DDIM=$(DIM) 
+CFLAGS += -DDIM=$(DIM) $(OPT)
+
+ifdef OMP
+CFLAGS += -fopenmp -DOMP
+endif
 
 SRC = $(HOME)/src
 UTILS = $(HOME)/utils
