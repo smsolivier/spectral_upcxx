@@ -89,6 +89,7 @@ void Dist3D::transform(int DIR) {
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
 	// Nz*Nx transforms of length Ny 
+	#pragma omp parallel for
 	for (int k=0; k<m_Nz; k++) {
 		for (int i=0; i<m_dims[0]; i++) {
 			m_fft.transform(m_local+i+k*m_dims[0]*m_dims[1], 
@@ -99,6 +100,7 @@ void Dist3D::transform(int DIR) {
 	upcxx::barrier(); 
 	int Ny = m_dims[1]/upcxx::rank_n(); 
 	// Ny*Nz transforms of length Nx and pencil transpose 
+	// #pragma omp parallel for 
 	for (int k=0; k<m_Nz; k++) {
 		for (int j=0; j<m_dims[1]; j++) {
 			cdouble* row = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
@@ -119,6 +121,7 @@ void Dist3D::transform(int DIR) {
 	upcxx::barrier(); 
 
 	// Nx*Ny transforms of length Nz 
+	// #pragma omp parallel for 
 	for (int j=0; j<Ny; j++) {
 		for (int i=0; i<m_dims[0]; i++) {
 			cdouble* zrow = tlocal + i + j*m_dims[0]; 
