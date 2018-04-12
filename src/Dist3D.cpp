@@ -83,7 +83,7 @@ void Dist3D::transform(int DIR) {
 	// initialize temporary location for transpose 
 	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n());
 	// setup my memory  
-	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_N); 
+	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize); 
 	// broadcast to other ranks 
 	for (int i=0; i<upcxx::rank_n(); i++) {
 		tmp[i] = upcxx::broadcast(tmp[i], i).wait(); 
@@ -140,6 +140,9 @@ void Dist3D::transform(int DIR) {
 		upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny); 
 	}
 	upcxx::barrier(); 
+
+	// clean up temp variable 
+	upcxx::delete_(tmp[upcxx::rank_me()]); 
 }
 
 void Dist3D::transpose() {
