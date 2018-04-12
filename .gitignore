@@ -1,0 +1,4 @@
+*.vtk
+*.visit 
+*.exe 
+make.inc
