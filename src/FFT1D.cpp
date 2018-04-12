@@ -6,11 +6,11 @@
 
 FFT1D::FFT1D() {}
 
-void FFT1D::forward(complex<double>* input, int N, int stride) {
+void FFT1D::forward(cdouble* input, int N, int stride) {
 	transform(input, N, stride, FFTW_FORWARD); 
 }
 
-void FFT1D::inverse(complex<double>* input, int N, int stride) {
+void FFT1D::inverse(cdouble* input, int N, int stride) {
 	transform(input, N, stride, FFTW_BACKWARD); 
 
 	// divide by N 
@@ -19,7 +19,7 @@ void FFT1D::inverse(complex<double>* input, int N, int stride) {
 	}
 }
 
-void FFT1D::transform(complex<double>* input, int N, int stride, int DIR) {
+void FFT1D::transform(cdouble* input, int N, int stride, int DIR) {
 	fftw_plan plan; 
 	fftw_complex* in; 
 	in = reinterpret_cast<fftw_complex*>(input); 

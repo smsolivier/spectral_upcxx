@@ -9,9 +9,6 @@
 
 using namespace std; 
 
-// typedef std::complex<double> cdouble; 
-typedef complex<double> cdouble; 
-
 /// Store a 3D array with UPCXX 
 /** stores x,y locally and distributes in z **/ 
 class Dist3D {
