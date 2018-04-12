@@ -1,16 +1,12 @@
 HOME = .
 
-CXX=g++
-DIM=3 
+include $(HOME)/make.inc
 
 CFLAGS += -DDIM=$(DIM) 
 
 SRC = $(HOME)/src
 UTILS = $(HOME)/utils
 WRITER = $(UTILS)/VisitWriter
-
-# SILO_HOME=/shared/apps/silo
-FFTW_HOME=/shared/apps/fftw
 
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
@@ -47,7 +43,7 @@ DEPS = $(patsubst $(OBJDIR)/%.o, $(DEPDIR)/%.d, $(OBJS))
 # don't delete intermediate files (.o's) 
 .SECONDARY :
 
-$(OBJDIR)/%.o : %.cpp $(HOME)/Makefile 
+$(OBJDIR)/%.o : %.cpp $(HOME)/Makefile $(HOME)/make.inc
 	mkdir -p $(OBJDIR); $(CXX) -c $(CFLAGS) $(LIBS) $(UPC) $< -o $@
 	mkdir -p $(DEPDIR) 
 	$(CXX) -MM $(CFLAGS) $(LIBS) $(UPC) $< | sed -e '1s@^@$(OBJDIR)\/@' > $*.d

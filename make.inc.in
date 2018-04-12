@@ -1,0 +1,4 @@
+CXX=g++
+DIM=3 
+# SILO_HOME=/shared/apps/silo
+FFTW_HOME=/shared/apps/fftw
