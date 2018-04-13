@@ -16,42 +16,49 @@ public:
 	/// default constructor 
 	Dist3D(); 
 	/// constructor 
-	Dist3D(array<int,DIM> N); 
+	Dist3D(array<INT,DIM> N); 
 	/// destructor 
 	~Dist3D(); 
 	/// initialize the array after calling default constructor 
-	void init(array<int,DIM> N); 
+	void init(array<INT,DIM> N); 
 	/// set a value in the distributed array 
-	void set(array<int,DIM> index, cdouble val); 
+	void set(array<INT,DIM> index, cdouble val); 
 	/// get an element from the distributed array 
-	cdouble operator[](array<int,DIM> index); 
+	cdouble operator[](array<INT,DIM> index); 
+	/// direct access to local pointer 
+	cdouble& operator[](INT index); 
 
 	/// in place forward transform 
 	void forward(); 
 	/// in place reverse transform 
 	void inverse(); 
 
+	/// element wise addition with another Dist3D 
+	void add(Dist3D& a); 
+
 	/// get size per processor 
-	int sizePerProcessor(); 
+	INT sizePerProcessor(); 
 	/// get total size 
-	int size(); 
+	INT size(); 
 	/// get pointer to local data
 	cdouble* getLocal(); 
+	/// compute allocated memory size per processor 
+	double memory(); 
 private:
 	/// fourier transform 
-	void transform(int dir); 
+	void transform(INT dir); 
 	/// global transpose 
 	void transpose(); 
 	/// get the rank and location into the distributed array 
-	void getIndex(array<int,DIM> index, int& rank, int& loc); 
+	void getIndex(array<INT,DIM> index, INT& rank, INT& loc); 
 	/// number of Nx by Ny slabs in the z direction 
-	int m_Nz;
+	INT m_Nz;
 	/// total number of values \f$N_x \times N_y \times N_z \f$  
-	int m_N; 
+	INT m_N; 
 	/// size of data owned by a processor 
-	int m_dSize; 
+	INT m_dSize; 
 	/// dimensions of array in x, y, z 
-	array<int,DIM> m_dims; 
+	array<INT,DIM> m_dims; 
 	/// global pointers to z slabs 
 	vector<upcxx::global_ptr<cdouble>> m_ptrs; 
 	/// local version of m_ptrs[rank_me()] 

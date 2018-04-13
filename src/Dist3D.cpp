@@ -1,20 +1,23 @@
 #include "Dist3D.H" 
 #include <iostream>
-#include <unistd.h>
+#ifdef OMP 
+#include <omp.h> 
+#endif
+#include "Timer.H"
 
 Dist3D::Dist3D() {}
 Dist3D::~Dist3D() {
 	upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
 }
 
-Dist3D::Dist3D(array<int,DIM> N) {
+Dist3D::Dist3D(array<INT,DIM> N) {
 	init(N); 
 }
 
-void Dist3D::init(array<int,DIM> N) {
+void Dist3D::init(array<INT,DIM> N) {
 	m_dims = N; 
 	m_N = 1; 
-	for (int i=0; i<DIM; i++) {
+	for (INT i=0; i<DIM; i++) {
 		m_N *= m_dims[i]; 
 	}
 
@@ -32,13 +35,13 @@ void Dist3D::init(array<int,DIM> N) {
 	m_local = m_ptrs[upcxx::rank_me()].local(); 
 
 	// broadcast pointer address to other ranks 
-	for (int i=0; i<upcxx::rank_n(); i++) {
+	for (INT i=0; i<upcxx::rank_n(); i++) {
 		m_ptrs[i] = upcxx::broadcast(m_ptrs[i], i).wait(); 
 	}
 }
 
-void Dist3D::set(array<int,DIM> index, cdouble val) {
-	int rank, loc; 
+void Dist3D::set(array<INT,DIM> index, cdouble val) {
+	INT rank, loc; 
 	getIndex(index, rank, loc); 
 
 	// only rput if not local data 
@@ -49,8 +52,8 @@ void Dist3D::set(array<int,DIM> index, cdouble val) {
 	}
 }
 
-cdouble Dist3D::operator[](array<int,DIM> index) {
-	int rank, loc; 
+cdouble Dist3D::operator[](array<INT,DIM> index) {
+	INT rank, loc; 
 	getIndex(index, rank, loc); 
 
 	// only do rget if not a local index 
@@ -59,6 +62,13 @@ cdouble Dist3D::operator[](array<int,DIM> index) {
 	} else {
 		return upcxx::rget(m_ptrs[rank]+loc).wait(); 
 	}
+}
+
+cdouble& Dist3D::operator[](INT index) {
+	if (index >= m_dSize) {
+		cout << "ERROR (Dist3D.cpp): index out of range in direct access operator" << endl; 
+	}
+	return m_local[index]; 
 }
 
 void Dist3D::forward() {
@@ -70,58 +80,107 @@ void Dist3D::inverse() {
 
 	// divide by N^3 
 	// #pragma omp parallel for 
-	for (int i=0; i<m_dSize; i++) {
+	for (INT i=0; i<m_dSize; i++) {
 		m_local[i] /= m_N; 
 	}
 }
 
-int Dist3D::sizePerProcessor() {return m_Nz; } 
-int Dist3D::size() {return m_N; } 
-cdouble* Dist3D::getLocal() {return m_local; } 
+void Dist3D::add(Dist3D& a) {
+	#pragma omp parallel for schedule(static)
+	for (INT i=0; i<m_dSize; i++) {
+		m_local[i] += a[i];  
+	}
+}
 
-void Dist3D::transform(int DIR) {
+INT Dist3D::sizePerProcessor() {return m_Nz; } 
+INT Dist3D::size() {return m_N; } 
+cdouble* Dist3D::getLocal() {return m_local; } 
+double Dist3D::memory() {
+	if (upcxx::rank_me() == 0) {
+		cout << "memory requirement = " << (double)m_N*sizeof(cdouble)/1e9 << " GB" << endl; 
+	}
+}
+
+void Dist3D::transform(INT DIR) {
 	// store transposed data in tmp 
 	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n(), NULL);
 	// allocate global memory 
 	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize);
 	// broadcast to other ranks 
-	for (int i=0; i<upcxx::rank_n(); i++) {
+	for (INT i=0; i<upcxx::rank_n(); i++) {
 		tmp[i] = upcxx::broadcast(tmp[i], i).wait(); 
 	}
 	// get local access 
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
-	// Nz*Nx transforms of length Ny 
+	// --- transform columns --- 
 #ifdef OMP 
 	#pragma omp parallel 
 	{
 		FFT1D fft(m_dims[1], m_dims[0], DIR); 
-		for (int k=0; k<m_Nz; k++) {
-			for (int i=0; i<m_dims[0]; i++) {
-				fft.transform(m_local+i*k*m_dims[0]*m_dims[1]); 
+		#pragma omp master 
+		{
+			cout << "nthreads = " << omp_get_num_threads() << endl; 
+		}
+		#pragma omp for 
+		for (INT k=0; k<m_Nz; k++) {
+			for (INT i=0; i<m_dims[0]; i++) {
+				cdouble* start = m_local + i + k*m_dims[0]*m_dims[1]; 
+				// fft.transform(start); 
+				cout << "transform " << i << ", " << k << endl; 
+				fft.transform(start, m_dims[1], m_dims[0], DIR);
 			}
 		}
 	}
 #else
-	for (int k=0; k<m_Nz; k++) {
-		for (int i=0; i<m_dims[0]; i++) {
+	for (INT k=0; k<m_Nz; k++) {
+		for (INT i=0; i<m_dims[0]; i++) {
 			m_fft.transform(m_local+i+k*m_dims[0]*m_dims[1], 
 				m_dims[1], m_dims[0], DIR); 
 		}
 	}
 #endif
-	
 	upcxx::barrier(); 
-	int Ny = m_dims[1]/upcxx::rank_n(); 
-	// Ny*Nz transforms of length Nx and pencil transpose 
-	// #pragma omp parallel for 
-	for (int k=0; k<m_Nz; k++) {
-		for (int j=0; j<m_dims[1]; j++) {
+
+	// --- transforms rows and pencil transpose --- 
+	INT Ny = m_dims[1]/upcxx::rank_n(); 
+#ifdef OMP 
+	#pragma omp parallel 
+	{
+		FFT1D fft(m_dims[0], 1, DIR); 
+		#pragma omp master
+		{
+			cout << "starting columns" << endl; 
+		}
+		#pragma omp for 
+		for (INT k=0; k<m_Nz; k++) {
+			for (INT j=0; j<m_dims[1]; j++) {
+				cdouble* start = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
+				fft.transform(start, m_dims[0], 1, DIR); 
+
+				// pencil transpose 
+				INT send_to = j/Ny; 
+				INT row_num = j % Ny;
+				INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
+					k*m_dims[0]*Ny + 
+					m_dims[0]*row_num; 
+				if (loc >= m_N) cout << "out of range" << endl; 
+				if (send_to == upcxx::rank_me()) {
+					memcpy(tlocal+loc, start, m_dims[0]*sizeof(cdouble)); 
+				} else {
+					upcxx::rput(start, tmp[send_to]+loc, m_dims[0]); 				
+				}
+			}
+		}
+	}
+#else
+	for (INT k=0; k<m_Nz; k++) {
+		for (INT j=0; j<m_dims[1]; j++) {
 			cdouble* row = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
 			m_fft.transform(row, m_dims[0], 1, DIR); 
-			int send_to = j/Ny; 
-			int row_num = j % Ny;
-			int loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
+			INT send_to = j/Ny; 
+			INT row_num = j % Ny;
+			INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
 				k*m_dims[0]*Ny + 
 				m_dims[0]*row_num; 
 			if (loc >= m_N) cout << "out of range" << endl; 
@@ -132,24 +191,42 @@ void Dist3D::transform(int DIR) {
 			}
 		}
 	}
+#endif
 	upcxx::barrier(); 
 
-	// Nx*Ny transforms of length Nz 
-	// #pragma omp parallel for 
-	for (int j=0; j<Ny; j++) {
-		for (int i=0; i<m_dims[0]; i++) {
+	// --- transform in z direction --- 
+#ifdef OMP 
+	#pragma omp parallel 
+	{
+		FFT1D fft(m_dims[2], m_dims[0]*Ny, DIR); 
+		#pragma omp master 
+		{
+			cout << "starting z" << endl; 
+		}
+		#pragma omp for 
+		for (INT j=0; j<Ny; j++) {
+			for (INT i=0; i<m_dims[0]; i++) {
+				cdouble* start = tlocal + i + j*m_dims[0]; 
+				fft.transform(start, m_dims[2], m_dims[0]*Ny, DIR); 
+			}
+		}
+	}
+#else 
+	for (INT j=0; j<Ny; j++) {
+		for (INT i=0; i<m_dims[0]; i++) {
 			cdouble* zrow = tlocal + i + j*m_dims[0]; 
 			m_fft.transform(zrow, m_dims[2], m_dims[0]*Ny, DIR); 
 		}
 	}
+#endif
 	upcxx::barrier(); 
 
 	// switch back to original data layout (send slabs of Nx*Ny) 
-	for (int k=0; k<m_dims[2]; k++) {
+	for (INT k=0; k<m_dims[2]; k++) {
 		cdouble* slab = tlocal + k*Ny*m_dims[0]; 
-		int send_to = k/m_Nz; 
-		int rem = k % m_Nz; 
-		int dest = upcxx::rank_me()*Ny*m_dims[0] + 
+		INT send_to = k/m_Nz; 
+		INT rem = k % m_Nz; 
+		INT dest = upcxx::rank_me()*Ny*m_dims[0] + 
 			rem*m_dims[0]*m_dims[1]; 
 		if (send_to == upcxx::rank_me()) {
 			memcpy(m_local+dest, slab, m_dims[0]*Ny*sizeof(cdouble)); 
@@ -166,10 +243,10 @@ void Dist3D::transform(int DIR) {
 void Dist3D::transpose() {
 	cdouble* tmp = new cdouble[m_N];
 	memcpy(tmp, m_local, m_N*sizeof(cdouble)); 
-	array<int,DIM> ind, indt = {0,0,0}; 
-	for (int i=0; i<m_dims[0]; i++) {
-		for (int j=0; j<m_dims[1]; j++) {
-			for (int k=0; k<m_Nz; k++) {
+	array<INT,DIM> ind, indt = {0,0,0}; 
+	for (INT i=0; i<m_dims[0]; i++) {
+		for (INT j=0; j<m_dims[1]; j++) {
+			for (INT k=0; k<m_Nz; k++) {
 				m_local[k+m_Nz*j+m_Nz*m_dims[1]*i] = 
 					tmp[i+j*m_dims[0]+k*m_dims[0]*m_dims[1]]; 
 			}
@@ -178,8 +255,8 @@ void Dist3D::transpose() {
 	delete(tmp); 
 }
 
-void Dist3D::getIndex(array<int,DIM> index, int& rank, int& loc) {
-	int n = index[0] + m_dims[0]*index[1] + index[2]*m_dims[0]*m_dims[1]; 
+void Dist3D::getIndex(array<INT,DIM> index, INT& rank, INT& loc) {
+	INT n = index[0] + m_dims[0]*index[1] + index[2]*m_dims[0]*m_dims[1]; 
 	if (n >= m_N) {
 		cout << "ERROR: index out of range in Dist3D.cpp" << endl; 
 		upcxx::finalize(); // close upcxx 

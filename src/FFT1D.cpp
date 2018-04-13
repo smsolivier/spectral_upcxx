@@ -1,6 +1,8 @@
 #include "FFT1D.H"
 #include <iostream>
 
+// #define MEASURE
+
 FFT1D::FFT1D() {
 	m_plan = NULL; 
 }
@@ -59,7 +61,13 @@ void FFT1D::transform(cdouble* input) {
 	fftw_complex* in = reinterpret_cast<fftw_complex*>(input); 
 
 	if (m_plan == NULL) {
-		fftw_complex* test = new fftw_complex[m_N*m_stride]; 
+		fftw_complex* test = NULL; 		
+#ifdef MEASURE
+		int measure = FFTW_MEASURE; 
+		test = new fftw_complex[m_N*m_stride]; 
+#else
+		int measure = FFTW_ESTIMATE; 
+#endif
 		#pragma omp critical 
 		m_plan = fftw_plan_many_dft(
 			1, // dimension of FFT 
@@ -74,9 +82,11 @@ void FFT1D::transform(cdouble* input) {
 			m_stride, // output stride 
 			0, // odist 
 			m_dir, // transform sign 
-			FFTW_MEASURE // FFTW flags 
+			measure // FFTW flags 
 			); 
-		delete[] test; 
+		if (test != NULL) delete[] test; 
+		cout << "plan created" << endl; 
 	} 
 	fftw_execute_dft(m_plan, in, in); 
+	cout << "plan executed" << endl; 
 }
