@@ -174,33 +174,26 @@ void Dist3D::transform(int DIR) {
 	// --- transforms rows and pencil transpose --- 
 	Timer rows("rows"); 
 	INT Ny = m_dims[1]/upcxx::rank_n(); 
-#ifdef DONTDO 
-	#pragma omp parallel 
-	{
-#ifdef VERBOSE
-		#pragma omp master
-		{
-			cout << "starting rows" << endl; 
+#if defined SLABS & defined OMP 
+	for (INT k=0; k<m_Nz; k++) {
+		#pragma omp parallel for 
+		for (INT j=0; j<m_dims[1]; j++) {
+			cdouble* start = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
+			m_fft_x.transform(start, DIR); 
 		}
-#endif
-		#pragma omp for 
-		for (INT k=0; k<m_Nz; k++) {
-			for (INT j=0; j<m_dims[1]; j++) {
-				cdouble* start = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
-				m_fft_x.transform(start, DIR); 
-				// pencil transpose 
-				INT send_to = j/Ny; 
-				INT row_num = j % Ny;
-				INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
-					k*m_dims[0]*Ny + 
-					m_dims[0]*row_num; 
-				if (send_to == upcxx::rank_me()) {
-					memcpy(tlocal+loc, start, m_dims[0]*sizeof(cdouble)); 
-				} 
-				else {
-					#pragma omp critical 
-					upcxx::rput(start, tmp[send_to]+loc, m_dims[0]);			
-				}
+		// slab transpose 
+		for (INT j=0; j<m_dims[1]; j++) {
+			INT send_to = j/Ny; 
+			INT row_num = j % Ny;
+			INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
+				k*m_dims[0]*Ny + 
+				m_dims[0]*row_num; 
+			if (send_to == upcxx::rank_me()) {
+				memcpy(tlocal+loc, start, m_dims[0]*sizeof(cdouble)); 
+			} 
+			else {
+				#pragma omp critical 
+				upcxx::rput(start, tmp[send_to]+loc, m_dims[0]);			
 			}
 		}
 	}
