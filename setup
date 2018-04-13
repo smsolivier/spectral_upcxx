@@ -1,0 +1,5 @@
+#!/bin/bash 
+
+export UPCXX_THREADMODE=par
+export UPCXX_SEGMENT_MB=40000
+export GASNET_MAX_SEGSIZE=128GB
