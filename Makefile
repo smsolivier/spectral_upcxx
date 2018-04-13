@@ -8,6 +8,21 @@ ifdef OMP
 CFLAGS += -fopenmp -DOMP
 endif
 
+# print progress statements 
+ifdef VERBOSE
+CFLAGS += -DVERBOSE
+endif
+
+# add debugging checks 
+ifdef DEBUG
+CFLAGS += -DDEBUG
+endif
+
+# use FFTW_MEASURE to optimize 1D FFT calls 
+ifdef MEASURE
+CFLAGS += -DMEASURE 
+endif
+
 SRC = $(HOME)/src
 UTILS = $(HOME)/utils
 WRITER = $(UTILS)/VisitWriter
@@ -53,6 +68,8 @@ $(OBJDIR)/%.o : %.cpp $(HOME)/Makefile $(HOME)/make.inc
 	$(CXX) -MM $(CFLAGS) $(LIBS) $(UPC) $< | sed -e '1s@^@$(OBJDIR)\/@' > $*.d
 	mv $*.d $(DEPDIR)
 
+clean :
+	rm -f *.exe *.vtk *.visit
 cleantree :
 	rm -rf $(DEPDIR) $(OBJDIR) $(HOME)/test/*.vtk $(HOME)/test/*.visit \
 		$(HOME)/test/*.exe

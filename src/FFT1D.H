@@ -19,7 +19,7 @@ public:
 	/// default constructor 
 	FFT1D(); 
 	/// set stride and size to reuse plan 
-	FFT1D(int N, int stride, int DIR); 
+	void init(int N, int stride, cdouble* input); 
 	/// destructor 
 	~FFT1D(); 
 	/// in place forward transform on data of size N with stride stride 
@@ -31,16 +31,18 @@ public:
 		dir = FFTW_BACKWARD is inverse 
 	**/ 
 	void transform(cdouble* input, int N, int stride, int dir);
-	void transform(cdouble* input); 
+	void transform(cdouble* input, int DIR); 
 private: 
 	/// fftw plan for many FFTs of the same size and stride 
-	fftw_plan m_plan; 
+	fftw_plan m_forward;
+	fftw_plan m_backward;  
 	/// size of FFT 
 	int m_N; 
 	/// stride 
 	int m_stride; 
 	/// FFT direction 
 	int m_dir; 
+	int m_alignment; 
 }; 
 
 #endif

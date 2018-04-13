@@ -46,13 +46,17 @@ public:
 	double memory(); 
 private:
 	/// fourier transform 
-	void transform(INT dir); 
-	/// global transpose 
-	void transpose(); 
+	void transform(int dir); 
+	/// transpose so that contiguous dimension is in z  
+	void transposeX2Z(cdouble* f); 
+	/// transpose from contiguous in z to contiguous in x 
+	void transposeZ2X(cdouble* f); 
 	/// get the rank and location into the distributed array 
 	void getIndex(array<INT,DIM> index, INT& rank, INT& loc); 
 	/// number of Nx by Ny slabs in the z direction 
 	INT m_Nz;
+	/// number of Nx by Nz slabs in the y direction (for after the global transpose) 
+	INT m_Ny; 
 	/// total number of values \f$N_x \times N_y \times N_z \f$  
 	INT m_N; 
 	/// size of data owned by a processor 
@@ -65,6 +69,12 @@ private:
 	cdouble* m_local; 
 	/// object for 1D ffts 
 	FFT1D m_fft; 
+	/// fft for striding in x 
+	FFT1D m_fft_x; 
+	/// fft for striding in y 
+	FFT1D m_fft_y; 
+	/// fft for striding in z 
+	FFT1D m_fft_z; 
 }; 
 
 #endif
