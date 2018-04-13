@@ -16,6 +16,8 @@ Dist3D::Dist3D(array<INT,DIM> N) {
 
 void Dist3D::init(array<INT,DIM> N) {
 	m_dims = N; 
+
+	// compute total size 
 	m_N = 1; 
 	for (INT i=0; i<DIM; i++) {
 		m_N *= m_dims[i]; 
