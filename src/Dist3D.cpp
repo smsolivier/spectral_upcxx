@@ -92,14 +92,25 @@ void Dist3D::transform(int DIR) {
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
 	// Nz*Nx transforms of length Ny 
-	#pragma omp parallel for
+#ifdef OMP 
+	#pragma omp parallel 
+	{
+		FFT1D fft(m_dims[1], m_dims[0], DIR); 
+		for (int k=0; k<m_Nz; k++) {
+			for (int i=0; i<m_dims[0]; i++) {
+				fft.transform(m_local+i*k*m_dims[0]*m_dims[1]); 
+			}
+		}
+	}
+#else
 	for (int k=0; k<m_Nz; k++) {
 		for (int i=0; i<m_dims[0]; i++) {
 			m_fft.transform(m_local+i+k*m_dims[0]*m_dims[1], 
 				m_dims[1], m_dims[0], DIR); 
 		}
 	}
-
+#endif
+	
 	upcxx::barrier(); 
 	int Ny = m_dims[1]/upcxx::rank_n(); 
 	// Ny*Nz transforms of length Nx and pencil transpose 

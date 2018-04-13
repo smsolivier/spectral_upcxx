@@ -2,53 +2,95 @@
 #include <iostream> 
 #include <complex> 
 #include <fstream> 
+#include <chrono> 
 
 using namespace std; 
 
-typedef complex<double> cdouble; 
-
-void write(cdouble* f, int N) {
-	ofstream out("out"); 
-	for (int i=0; i<N; i++) {
-		for (int j=0; j<N; j++) {
-			out << f[j+i*N].real() << " "; 
+void transform(cdouble* f, int N, int DIR) {
+	#pragma omp parallel 
+	{
+		FFT1D fft(N, 1, DIR); 
+		#pragma omp for 
+		for (int k=0; k<N; k++) {
+			for (int j=0; j<N; j++) {
+				cdouble* start = f + j*N + k*N*N; 
+				fft.transform(start); 
+				// fft.transform(start, N, 1, DIR); 
+			}
 		}
-		out << endl; 
 	}
-	out.close(); 
+
+	#pragma omp parallel 
+	{
+		FFT1D fft(N, N, DIR); 
+		#pragma omp for 
+		for (int k=0; k<N; k++) {
+			for (int i=0; i<N; i++) {
+				cdouble* start = f + i + k*N*N; 
+				fft.transform(start); 
+				// fft.transform(start, N, N, DIR); 
+			}
+		}
+	}
+
+	#pragma omp parallel 
+	{
+		FFT1D fft(N, N*N, DIR); 
+		#pragma omp for 
+		for (int j=0; j<N; j++) {
+			for (int i=0; i<N; i++) {
+				cdouble* start = f + i + j*N; 
+				fft.transform(start); 
+				// fft.transform(start, N, N*N, DIR); 
+			}
+		}
+	}
 }
 
-int main() {
+int main(int argc, char* argv[]) {
 	int N = 32; 
-	FFT1D fft; 
+	if (argc > 1) N = atoi(argv[1]); 
+	int N3 = pow(N, 3); 
 
-	cdouble* f = new cdouble[N*N]; 
-	double h = 2*M_PI/N;
-	for (int i=0; i<N; i++) {
-		for (int j=0; j<N; j++) {
-			f[j+i*N] = sin(i*h)*sin(j*h); 
-			// f[j+i*N] = sin(i*h); 
-			// f[j+i*N] = 1; 
-		}
+	cdouble* f = new cdouble[N3]; 
+	cdouble* g = new cdouble[N3]; 
+
+	for (int i=0; i<N3; i++) {
+		f[i] = 1.; 
+		g[i] = f[i]; 
 	}
 
-	for (int i=0; i<N; i++) {
-		fft.forward(f+i*N, N, 1); 
+	// cdouble* row = new cdouble[N]; 
+	// for (int i=0; i<N; i++) {
+	// 	row[i] = 1.; 
+	// }
+	// FFT1D forward(N, 1, 1); 
+	// forward.transform(row); 
+	// FFT1D backward(N, 1, -1); 
+	// backward.transform(row); 
+	// for (int i=0; i<N; i++) {
+	// 	row[i] /= N; 
+	// 	if (abs(row[i].real() - 1.) > 1e-3) cout << row[i] << endl; 
+	// }
+
+	chrono::time_point<chrono::system_clock> start = chrono::system_clock::now(); 
+	transform(f, N, 1); 
+	transform(f, N, -1); 
+	chrono::duration<double> el = chrono::system_clock::now() - start; 
+
+	cout << "time = " << el.count() << " seconds" << endl; 
+
+	#pragma omp parallel for 
+	for (int i=0; i<N3; i++) {
+		f[i] /= N3; 
 	}
 
-	for (int i=0; i<N; i++) {
-		fft.forward(f+i, N, N); 
+	bool wrong = false; 
+	for (int i=0; i<N3; i++) {
+		if (abs(f[i].real() - g[i].real()) > 1e-3) wrong = true; 
 	}
+	if (wrong) cout << "WRONG!" << endl; 
 
-	for (int i=0; i<N; i++) {
-		fft.inverse(f+i*N, N, 1); 
-	}
-
-	for (int i=0; i<N; i++) {
-		fft.inverse(f+i, N, N); 
-	}
-
-	write(f, N); 
-
-	delete(f); 
+	delete[] f; 
+	delete[] g; 
 }
