@@ -20,38 +20,33 @@ int main() {
 	int mrank = upcxx::rank_me(); 
 
 	int Nz = ceil((double)dims[2]/upcxx::rank_n()); 
-	if (mrank == 0) cout << "Nz = " << Nz << endl;
 
 	double xb = 2*M_PI; 
 	float hx = xb/(dims[0]); 
 	float hy = xb/(dims[1]); 
 	float hz = xb/(dims[2]); 
 
-	if (upcxx::rank_me() == 0) {
-		double s = 0; 
-		double s2 = 0; 		
-		bool wrong = false; 
-		for (int n=0; n<upcxx::rank_n(); n++) {
-			wrong = false; 
-			array<int,DIM> ind = {0,0,0}; 
-			chrono::time_point<chrono::system_clock> start = chrono::system_clock::now(); 
-			for (ind[0]=0; ind[0]<dims[0]; ind[0]++) {
-				for (ind[1]=0; ind[1]<dims[1]; ind[1]++) {
-					for (ind[2]=n*Nz; ind[2]<(n+1)*Nz and ind[2]<dims[2]; ind[2]++) {
-						// if (d[ind] != n) {
-						// 	wrong = true;  
-						// }
-						d.set(ind, sin(ind[0]*hx)*sin(ind[1]*hy)*sin(ind[2]*hz)); 
-						// d.set(ind, sin(ind[2]*hx)); 
-						// d.set(ind, 1.); 
-					}
-				}
+	double s = 0; 
+	double s2 = 0; 		
+	bool wrong = false; 
+	wrong = false; 
+	array<int,DIM> ind = {0,0,0}; 
+	chrono::time_point<chrono::system_clock> start = chrono::system_clock::now(); 
+	for (ind[0]=0; ind[0]<dims[0]; ind[0]++) {
+		for (ind[1]=0; ind[1]<dims[1]; ind[1]++) {
+			for (ind[2]=mrank*Nz; ind[2]<(mrank+1)*Nz and ind[2]<dims[2]; ind[2]++) {
+				// if (d[ind] != n) {
+				// 	wrong = true;  
+				// }
+				d.set(ind, sin(ind[0]*hx)*sin(ind[1]*hy)); 
+				// d.set(ind, sin(ind[2]*hx)); 
+				// d.set(ind, 1.); 
 			}
-			chrono::duration<double> el = chrono::system_clock::now() - start; 
-			cout << "n = " << n << ": " << el.count() << " seconds" << endl; 
-			if (wrong) {cout << "wrong" << endl; }
 		}
 	}
+	chrono::duration<double> el = chrono::system_clock::now() - start; 
+	cout << "n = " << mrank << ": " << el.count() << " seconds" << endl; 
+	if (wrong) {cout << "wrong" << endl; }
 
 	upcxx::barrier(); 
 
@@ -70,14 +65,6 @@ int main() {
 	for (int i=0; i<Nz; i++) {
 		z[i] = (mrank*Nz + i)*hz; 
 	}
-	// // for (int k=mrank*Nz; k<(mrank+1)*Nz; k++) {
-	// // 	for (int i=0; i<dims[0]; i++) {
-	// // 		for (int j=0; j<dims[1]; j++) {
-	// // 			array<int,DIM> ind = {i,j,k}; 
-	// // 			d.set(ind, sin(x[i])*sin(y[j])*sin(hz*k)); 
-	// // 		}
-	// // 	}
-	// // }
 
 	// ouput your data 
 	int nvars = 1; 
@@ -95,7 +82,7 @@ int main() {
 
 	string fname = "solution" + to_string(mrank); 
 	array<int,DIM> tdims = {dims[0], dims[1], Nz}; 
-	write_rectilinear_mesh(fname.c_str(), 0, &tdims[0], &x[0], &y[0], &z[0],
+	write_rectilinear_mesh(fname.c_str(), 1, &tdims[0], &x[0], &y[0], &z[0],
 		nvars, &vardim[0], &centering[0], varnames, &vals); 
 
 	// write master file 
