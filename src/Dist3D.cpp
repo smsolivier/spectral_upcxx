@@ -1,9 +1,10 @@
 #include "Dist3D.H" 
 #include <iostream>
+#include <unistd.h>
 
 Dist3D::Dist3D() {}
 Dist3D::~Dist3D() {
-	upcxx::delete_(m_ptrs[upcxx::rank_me()]); 
+	upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
 }
 
 Dist3D::Dist3D(array<int,DIM> N) {
@@ -68,6 +69,7 @@ void Dist3D::inverse() {
 	transform(-1); 
 
 	// divide by N^3 
+	// #pragma omp parallel for 
 	for (int i=0; i<m_dSize; i++) {
 		m_local[i] /= m_N; 
 	}
@@ -78,14 +80,15 @@ int Dist3D::size() {return m_N; }
 cdouble* Dist3D::getLocal() {return m_local; } 
 
 void Dist3D::transform(int DIR) {
-	// initialize temporary location for transpose 
-	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n());
-	// setup my memory  
-	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize); 
+	// store transposed data in tmp 
+	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n(), NULL);
+	// allocate global memory 
+	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize);
 	// broadcast to other ranks 
 	for (int i=0; i<upcxx::rank_n(); i++) {
 		tmp[i] = upcxx::broadcast(tmp[i], i).wait(); 
 	}
+	// get local access 
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
 	// Nz*Nx transforms of length Ny 
@@ -140,13 +143,13 @@ void Dist3D::transform(int DIR) {
 		if (send_to == upcxx::rank_me()) {
 			memcpy(m_local+dest, slab, m_dims[0]*Ny*sizeof(cdouble)); 
 		} else {
-			upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny); 			
+			upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny).wait();
 		}
 	}
-	upcxx::barrier(); 
 
 	// clean up temp variable 
-	upcxx::delete_(tmp[upcxx::rank_me()]); 
+	upcxx::delete_array(tmp[upcxx::rank_me()]);
+	upcxx::barrier(); 
 }
 
 void Dist3D::transpose() {
