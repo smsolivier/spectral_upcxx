@@ -181,20 +181,27 @@ void Dist3D::transform(int DIR) {
 			cdouble* start = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
 			m_fft_x.transform(start, DIR); 
 		}
-		// slab transpose 
-		for (INT j=0; j<m_dims[1]; j++) {
-			INT send_to = j/Ny; 
-			INT row_num = j % Ny;
-			INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
-				k*m_dims[0]*Ny + 
-				m_dims[0]*row_num; 
-			if (send_to == upcxx::rank_me()) {
-				memcpy(tlocal+loc, start, m_dims[0]*sizeof(cdouble)); 
-			} 
-			else {
-				#pragma omp critical 
-				upcxx::rput(start, tmp[send_to]+loc, m_dims[0]);			
-			}
+		// send lots of pencils  
+		// for (INT j=0; j<m_dims[1]; j++) {
+		// 	cdouble* start = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
+		// 	INT send_to = j/Ny; 
+		// 	INT row_num = j % Ny;
+		// 	INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
+		// 		k*m_dims[0]*Ny + 
+		// 		m_dims[0]*row_num; 
+		// 	if (send_to == upcxx::rank_me()) {
+		// 		memcpy(tlocal+loc, start, m_dims[0]*sizeof(cdouble)); 
+		// 	} 
+		// 	else {
+		// 		upcxx::rput(start, tmp[send_to]+loc, m_dims[0]);			
+		// 	}
+		// }
+
+		// send slabs 
+		for (int j=0; j<upcxx::rank_n(); j++) {
+			cdouble* start = m_local + k*m_dims[0]*m_dims[1]; 
+			INT loc = j*m_Ny*m_dims[0]*m_Nz + k*m_dims[0]*m_Ny; 
+			upcxx::rput(start, tmp[j]+loc, m_dims[0]*m_Ny); 
 		}
 	}
 #else
