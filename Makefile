@@ -43,9 +43,11 @@ CFLAGS += -DSILO $(SILO_INC)
 LIBS += $(SILO_LIB)
 endif 
 
+# UPCMETA = /global/common/cori/ftg/upcxx/2018.3.0/hsw/gnu/PrgEnv-gnu-6.0.4-7.1.0/upcxx.debug.gasnet_par.aries/bin/upcxx-meta
+UPCMETA = upcxx-meta
 # upcxx stuff 
-UPC = $(shell upcxx-meta PPFLAGS) $(shell upcxx-meta LDFLAGS) \
-	$(shell upcxx-meta LIBFLAGS) 
+UPC = $(shell $(UPCMETA) PPFLAGS) $(shell $(UPCMETA) LDFLAGS) \
+	$(shell $(UPCMETA) LIBFLAGS) 
 
 # look for source files in
 VPATH = $(SRC) $(WRITER) 

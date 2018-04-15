@@ -1,4 +1,4 @@
-#include "Dist3D.H"
+#include "Scalar.H"
 #include <upcxx/upcxx.hpp> 
 #include <iostream> 
 #include "Timer.H"
@@ -11,9 +11,9 @@ int main(int argc, char* argv[]) {
 	INT N = 32; 
 	if (argc > 1) N = atoi(argv[1]); 
 	array<INT,DIM> dims = {N, N, N}; 
-	Dist3D a(dims); 
+	Scalar a(dims); 
 	a.memory(); 
-	Dist3D b(dims); 
+	Scalar b(dims); 
 
 	INT Nz = dims[2]/upcxx::rank_n(); 
 	array<INT,DIM> ind = {0,0,0}; 

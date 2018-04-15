@@ -1,5 +1,5 @@
-#ifndef __DIST_3D_H__ 
-#define __DIST_3D_H__
+#ifndef __SCALAR_H__ 
+#define __SCALAR_H__
 
 #include "FFT1D.H"
 #include <array> 
@@ -11,14 +11,14 @@ using namespace std;
 
 /// Store a 3D array with UPCXX 
 /** stores x,y locally and distributes in z **/ 
-class Dist3D {
+class Scalar {
 public: 
 	/// default constructor 
-	Dist3D(); 
+	Scalar(); 
 	/// constructor 
-	Dist3D(array<INT,DIM> N); 
+	Scalar(array<INT,DIM> N); 
 	/// destructor 
-	~Dist3D(); 
+	~Scalar(); 
 	/// initialize the array after calling default constructor 
 	void init(array<INT,DIM> N); 
 	/// set a value in the distributed array 
@@ -33,8 +33,8 @@ public:
 	/// in place reverse transform 
 	void inverse(); 
 
-	/// element wise addition with another Dist3D 
-	void add(Dist3D& a); 
+	/// element wise addition with another Scalar 
+	void add(Scalar& a); 
 
 	/// get size per processor 
 	INT sizePerProcessor(); 

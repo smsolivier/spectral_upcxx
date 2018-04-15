@@ -1,4 +1,4 @@
-#include "Dist3D.H"
+#include "Scalar.H"
 #include <upcxx/upcxx.hpp>
 #include <iostream>
 #include <fstream> 
@@ -15,7 +15,7 @@ int main() {
 		cout << "memory = " << dims[0]*dims[1]*dims[2]*sizeof(double)/1e9 << endl; 
 	}
 
-	Dist3D d(dims); 
+	Scalar d(dims); 
 
 	int mrank = upcxx::rank_me(); 
 

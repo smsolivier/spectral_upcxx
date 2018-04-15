@@ -1,4 +1,4 @@
-#include "Dist3D.H"
+#include "Scalar.H"
 #include "VisitWriter.H"
 #include <upcxx/upcxx.hpp> 
 #include <chrono> 
@@ -20,8 +20,8 @@ int main(int argc, char* argv[]) {
 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	Dist3D d(dims); 
-	Dist3D ans(dims); 
+	Scalar d(dims); 
+	Scalar ans(dims); 
 	d.memory(); 
 
 	INT Nz = dims[2]/upcxx::rank_n(); 
@@ -122,5 +122,6 @@ int main(int argc, char* argv[]) {
 	// 	}
 	// 	out.close(); 
 	// }
+	PRINT_TIMER_REPORT(upcxx::rank_me()); 
 	upcxx::finalize(); 
 }
