@@ -5,3 +5,4 @@ make.inc
 obj/
 dep/
 *~
+/docs/doxygen

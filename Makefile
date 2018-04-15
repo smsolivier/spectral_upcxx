@@ -2,6 +2,12 @@ HOME = .
 
 include $(HOME)/make.inc
 
+SRC = $(HOME)/src
+UTILS = $(HOME)/utils
+WRITER = $(UTILS)/VisitWriter
+TIMER = $(UTILS)/timer
+
+# import settings from make.inc 
 CFLAGS += -DDIM=$(DIM) $(OPT)
 
 ifdef OMP
@@ -23,10 +29,6 @@ ifdef MEASURE
 CFLAGS += -DMEASURE 
 endif
 
-SRC = $(HOME)/src
-UTILS = $(HOME)/utils
-WRITER = $(UTILS)/VisitWriter
-
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
 FFTW_LIB = -L$(FFTW_HOME)/lib -lfftw3 
@@ -43,21 +45,21 @@ CFLAGS += -DSILO $(SILO_INC)
 LIBS += $(SILO_LIB)
 endif 
 
-# UPCMETA = /global/common/cori/ftg/upcxx/2018.3.0/hsw/gnu/PrgEnv-gnu-6.0.4-7.1.0/upcxx.debug.gasnet_par.aries/bin/upcxx-meta
-UPCMETA = upcxx-meta
+UPCMETA = /global/common/cori/ftg/upcxx/2018.3.0/hsw/gnu/PrgEnv-gnu-6.0.4-7.1.0/upcxx.debug.gasnet_par.aries/bin/upcxx-meta
+#UPCMETA = upcxx-meta
 # upcxx stuff 
 UPC = $(shell $(UPCMETA) PPFLAGS) $(shell $(UPCMETA) LDFLAGS) \
 	$(shell $(UPCMETA) LIBFLAGS) 
 
 # look for source files in
-VPATH = $(SRC) $(WRITER) 
+VPATH = $(SRC) $(WRITER) $(TIMER)
 # look for includes in 
-CFLAGS += -I$(SRC) -I$(WRITER) 
+CFLAGS += -I$(SRC) -I$(WRITER) -I$(TIMER)
 
 OBJDIR = $(HOME)/obj
 DEPDIR = $(HOME)/dep
 
-SRCFILES = $(notdir $(wildcard $(SRC)/*.cpp $(WRITER)/*.cpp)) 
+SRCFILES = $(notdir $(wildcard $(SRC)/*.cpp $(WRITER)/*.cpp $(TIMER)/*.cpp)) 
 OBJS = $(patsubst %.cpp, $(OBJDIR)/%.o, $(SRCFILES))
 DEPS = $(patsubst $(OBJDIR)/%.o, $(DEPDIR)/%.d, $(OBJS))
 
@@ -71,13 +73,16 @@ $(OBJDIR)/%.o : %.cpp $(HOME)/Makefile $(HOME)/make.inc
 	mv $*.d $(DEPDIR)
 
 clean :
-	rm -f *.exe *.vtk *.visit
+	rm -f *.exe *.vtk *.visit *.time
 cleantree :
 	rm -rf $(DEPDIR) $(OBJDIR) $(HOME)/test/*.vtk $(HOME)/test/*.visit \
 		$(HOME)/test/*.exe
 
 -include $(DEPS)
 
+.PHONY : docs
+docs :
+	cd $(HOME)/docs; doxygen Doxyfile 
 objs :
 	@echo $(OBJS)
 flags : 
