@@ -79,49 +79,48 @@ int main(int argc, char* argv[]) {
 	}
 
 	// write to file 
-	// vector<float> x(dims[0]); 
-	// vector<float> y(dims[1]); 
-	// vector<float> z(Nz);
-	// for (INT i=0; i<dims[0]; i++) {
-	// 	x[i] = i*hx; 
-	// } 
-	// for (INT i=0; i<dims[1]; i++) {
-	// 	y[i] = i*hy; 
-	// }
-	// for (INT i=0; i<Nz; i++) {
-	// 	z[i] = (mrank*Nz + i)*hz; 
-	// }
+	vector<float> x(dims[0]); 
+	vector<float> y(dims[1]); 
+	vector<float> z(Nz);
+	for (INT i=0; i<dims[0]; i++) {
+		x[i] = i*hx; 
+	} 
+	for (INT i=0; i<dims[1]; i++) {
+		y[i] = i*hy; 
+	}
+	for (INT i=0; i<Nz; i++) {
+		z[i] = (mrank*Nz + i)*hz; 
+	}
 
-	// // ouput your data 
-	// int nvars = 1; 
-	// float* vals = new float[dims[0]*dims[1]*Nz]; 
-	// cdouble* local = d.getLocal(); 
-	// cdouble* ans_local = ans.getLocal(); 
-	// for (INT i=0; i<dims[0]*dims[1]*Nz; i++) {
-	// 	vals[i] = abs(local[i].real() - ans_local[i].real()); 
-	// 	// vals[i] = local[i].real(); 
-	// }
-	// int vardim[nvars]; 
-	// vardim[0] = 1; 
-	// int centering[nvars]; 
-	// centering[0] = 1; 
-	// const char* varnames[nvars]; 
-	// varnames[0] = "u"; 
+	// ouput your data 
+	int nvars = 1; 
+	float* vals = new float[dims[0]*dims[1]*Nz]; 
+	cdouble* local = d.getLocal(); 
+	cdouble* ans_local = ans.getLocal(); 
+	for (INT i=0; i<dims[0]*dims[1]*Nz; i++) {
+		vals[i] = abs(local[i].real() - ans_local[i].real()); 
+		// vals[i] = local[i].real(); 
+	}
+	int vardim[nvars]; 
+	vardim[0] = 1; 
+	int centering[nvars]; 
+	centering[0] = 1; 
+	const char* varnames[nvars]; 
+	varnames[0] = "u"; 
 
-	// string fname = "solution" + to_string(mrank); 
-	// array<int,DIM> tdims = {(int)dims[0], (int)dims[1], (int)Nz}; 
-	// write_rectilinear_mesh(fname.c_str(), 1, &tdims[0], &x[0], &y[0], &z[0],
-	// 	nvars, &vardim[0], &centering[0], varnames, &vals); 
+	string fname = "solution" + to_string(mrank); 
+	array<int,DIM> tdims = {(int)dims[0], (int)dims[1], (int)Nz}; 
+	write_rectilinear_mesh(fname.c_str(), 1, &tdims[0], &x[0], &y[0], &z[0],
+		nvars, &vardim[0], &centering[0], varnames, &vals); 
 
-	// // write master file 
-	// if (mrank==0) {
-	// 	ofstream out("solution.visit"); 
-	// 	out << "!NBLOCKS " << upcxx::rank_n() << endl; 
-	// 	for (int i=0; i<upcxx::rank_n(); i++) {
-	// 		out << "solution" << i << ".vtk" << endl; 
-	// 	}
-	// 	out.close(); 
-	// }
-	PRINT_TIMER_REPORT(upcxx::rank_me()); 
+	// write master file 
+	if (mrank==0) {
+		ofstream out("solution.visit"); 
+		out << "!NBLOCKS " << upcxx::rank_n() << endl; 
+		for (int i=0; i<upcxx::rank_n(); i++) {
+			out << "solution" << i << ".vtk" << endl; 
+		}
+		out.close(); 
+	}
 	upcxx::finalize(); 
 }
