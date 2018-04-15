@@ -2,12 +2,6 @@
 #define __SCALAR_H__
 
 #include "FFT1D.H"
-#include <array> 
-#include <vector> 
-#include <upcxx/upcxx.hpp> 
-#include <complex> 
-
-using namespace std; 
 
 /// Store a 3D array with UPCXX 
 /** stores x,y locally and distributes in z **/ 
@@ -45,6 +39,11 @@ public:
 
 	/// element wise addition with another Scalar 
 	void add(Scalar& a); 
+
+	/// compute gradient \f$ \nabla f \f$. Returns in fourier space 
+	Vector gradient(); 
+	/// compute laplacian: \f$ \nabla^2 f \f$. Returns in fourier space 
+	Vector laplacian(); 
 
 	/// get size per processor 
 	INT sizePerProcessor(); 

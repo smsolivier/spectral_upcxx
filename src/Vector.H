@@ -1,11 +1,6 @@
 #ifndef _VECTOR_H_
 #define	_VECTOR_H_
 
-#include "Scalar.H"
-#include <array> 
-
-using namespace std; 
-
 /// Represent a vector with scalars in DIM directions 
 class Vector {
 public:
