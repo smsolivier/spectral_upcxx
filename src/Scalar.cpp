@@ -14,11 +14,11 @@ Scalar::~Scalar() {
 	upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
 }
 
-Scalar::Scalar(array<INT,DIM> N) {
-	init(N); 
+Scalar::Scalar(array<INT,DIM> N, bool physical) {
+	init(N, physical); 
 }
 
-void Scalar::init(array<INT,DIM> N) {
+void Scalar::init(array<INT,DIM> N, bool physical) {
 #ifdef OMP 
 	int nthreads; 
 	#pragma omp parallel 
@@ -62,6 +62,20 @@ void Scalar::init(array<INT,DIM> N) {
 	// needs to by Ny 
 	m_fft_z.init(m_dims[2], m_dims[0]*m_Ny, m_local); 
 	setup.stop(); 
+
+	if (physical) setPhysical(); 
+	else setFourier(); 
+}
+
+void Scalar::operator=(Scalar& scalar) {
+	Timer deepcopy("deep copy"); 
+	Scalar ret; 
+	ret.init(m_dims, isPhysical()); 
+
+	// copy data over 
+	for (INT i=0; i<m_dSize; i++) {
+		ret[i] = (*this)[i]; 
+	}
 }
 
 void Scalar::set(array<INT,DIM> index, cdouble val) {
@@ -95,11 +109,31 @@ cdouble& Scalar::operator[](INT index) {
 	return m_local[index]; 
 }
 
+array<int,DIM> Scalar::freq(array<INT,DIM> ind) {
+	array<int,DIM> k; 
+	for (int i=0; i<DIM; i++) {
+		if (ind[i] <= m_dims[i]/2) k[i] = ind[i]; 
+		else k[i] = -m_dims[i] + ind[i]; 
+	}
+
+	return k; 
+}
+
 void Scalar::forward() {
+	if (isFourier()) {
+		cout << "ERROR (Scalar.cpp): already in fourier space" << endl; 
+		upcxx::finalize(); 
+		exit(0); 
+	}
 	transform(1); 
 }
 
 void Scalar::inverse() {
+	if (isPhysical()) {
+		cout << "ERROR (Scalar.cpp): already in physical space" << endl; 
+		upcxx::finalize(); 
+		exit(0); 
+	}
 	transform(-1); 
 
 	// divide by N^3 
@@ -107,6 +141,20 @@ void Scalar::inverse() {
 	for (INT i=0; i<m_dSize; i++) {
 		m_local[i] /= m_N; 
 	}
+}
+
+void Scalar::forward(Scalar& a_scalar) {
+	// deep copy 
+	a_scalar = (*this); 
+
+	a_scalar.forward(); 
+}
+
+void Scalar::inverse(Scalar& a_scalar) {
+	// deep copy 
+	a_scalar = (*this); 
+
+	a_scalar.inverse(); 
 }
 
 void Scalar::add(Scalar& a) {
@@ -124,6 +172,11 @@ double Scalar::memory() {
 		cout << "memory requirement = " << (double)m_N*sizeof(cdouble)/1e9 << " GB" << endl; 
 	}
 }
+
+void Scalar::setPhysical() {m_fourier = false; }
+void Scalar::setFourier() {m_fourier = true; }
+bool Scalar::isPhysical() {return !m_fourier; }
+bool Scalar::isFourier() {return m_fourier; } 
 
 void Scalar::transform(int DIR) {
 	// store transposed data in tmp 
@@ -343,8 +396,9 @@ void Scalar::transposeZ2X(cdouble* f) {
 
 void Scalar::getIndex(array<INT,DIM> index, INT& rank, INT& loc) {
 	INT n = index[0] + m_dims[0]*index[1] + index[2]*m_dims[0]*m_dims[1]; 
-	if (n >= m_dSize) {
+	if (n >= m_N) {
 		cout << "ERROR: index out of range in Scalar.cpp" << endl; 
+		cout << "n = " << n << endl; 
 		upcxx::finalize(); // close upcxx 
 		exit(0); // exit program 
 	}

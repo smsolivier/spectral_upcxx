@@ -16,22 +16,32 @@ public:
 	/// default constructor 
 	Scalar(); 
 	/// constructor 
-	Scalar(array<INT,DIM> N); 
+	/** set size in DIM directions. Defaults to building in physical space **/ 
+	Scalar(array<INT,DIM> N, bool physical=true); 
 	/// destructor 
 	~Scalar(); 
 	/// initialize the array after calling default constructor 
-	void init(array<INT,DIM> N); 
+	void init(array<INT,DIM> N, bool physical=true); 
+	/// copy constructor. Does a deep copy 
+	void operator=(Scalar& scalar); 
 	/// set a value in the distributed array 
 	void set(array<INT,DIM> index, cdouble val); 
 	/// get an element from the distributed array 
 	cdouble operator[](array<INT,DIM> index); 
 	/// direct access to local pointer 
 	cdouble& operator[](INT index); 
+	/// return frequency for grid point ind 
+	array<int,DIM> freq(array<INT,DIM> ind); 
 
 	/// in place forward transform 
 	void forward(); 
 	/// in place reverse transform 
-	void inverse(); 
+	void inverse();
+
+	/// out of place forward transform 
+	void forward(Scalar& a_scalar); 
+	/// out of place reverse transform 
+	void inverse(Scalar& a_scalar); 
 
 	/// element wise addition with another Scalar 
 	void add(Scalar& a); 
@@ -44,15 +54,25 @@ public:
 	cdouble* getLocal(); 
 	/// compute allocated memory size per processor 
 	double memory(); 
+
+	/// query if (*this) is in physical space 
+	bool isPhysical(); 
+	/// query if (*this) is in fourier space 
+	bool isFourier(); 
+	/// flag (*this) as in fourier space 
+	void setFourier(); 
+	/// flag (*this) as in physical space 
+	void setPhysical(); 
 private:
-	/// fourier transform 
+	/// perform fourier transform in parallel 
 	void transform(int dir); 
 	/// transpose so that contiguous dimension is in z  
 	void transposeX2Z(cdouble* f); 
 	/// transpose from contiguous in z to contiguous in x 
 	void transposeZ2X(cdouble* f); 
 	/// get the rank and location into the distributed array 
-	void getIndex(array<INT,DIM> index, INT& rank, INT& loc); 
+	inline void getIndex(array<INT,DIM> index, INT& rank, INT& loc); 
+
 	/// number of Nx by Ny slabs in the z direction 
 	INT m_Nz;
 	/// number of Nx by Nz slabs in the y direction (for after the global transpose) 
@@ -75,6 +95,9 @@ private:
 	FFT1D m_fft_y; 
 	/// fft for striding in z 
 	FFT1D m_fft_z; 
+
+	/// store if in physical/fourier space 
+	bool m_fourier; 
 }; 
 
 #endif
