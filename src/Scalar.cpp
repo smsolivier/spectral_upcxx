@@ -9,9 +9,13 @@
 // #define SLABS
 // #define PENCILS
 
-Scalar::Scalar() {}
+Scalar::Scalar() {
+	m_initialized = false; 
+}
+
 Scalar::~Scalar() {
-	upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
+	if (m_initialized)
+		upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
 }
 
 Scalar::Scalar(array<INT,DIM> N, bool physical) {
@@ -19,6 +23,7 @@ Scalar::Scalar(array<INT,DIM> N, bool physical) {
 }
 
 void Scalar::init(array<INT,DIM> N, bool physical) {
+	m_initialized = true; 
 #ifdef OMP 
 	int nthreads; 
 	#pragma omp parallel 
@@ -68,13 +73,12 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 }
 
 void Scalar::operator=(Scalar& scalar) {
-	Timer deepcopy("deep copy"); 
-	Scalar ret; 
-	ret.init(m_dims, isPhysical()); 
+	Timer deepcopy("deep copy");  
+	init(scalar.getDims(), scalar.isPhysical()); 
 
 	// copy data over 
 	for (INT i=0; i<m_dSize; i++) {
-		ret[i] = (*this)[i]; 
+		(*this)[i] = scalar[i]; 
 	}
 }
 
@@ -126,6 +130,7 @@ void Scalar::forward() {
 		exit(0); 
 	}
 	transform(1); 
+	setFourier(); 
 }
 
 void Scalar::inverse() {
@@ -141,6 +146,7 @@ void Scalar::inverse() {
 	for (INT i=0; i<m_dSize; i++) {
 		m_local[i] /= m_N; 
 	}
+	setPhysical(); 
 }
 
 void Scalar::forward(Scalar& a_scalar) {
@@ -164,7 +170,13 @@ void Scalar::add(Scalar& a) {
 	}
 }
 
-INT Scalar::sizePerProcessor() {return m_Nz; } 
+INT Scalar::localSize() {return m_dSize; } 
+array<INT,DIM> Scalar::getDims() {return m_dims; }
+array<INT,DIM> Scalar::getPDims() {
+	array<INT,DIM> dims = m_dims; 
+	dims[2] = m_Nz; 
+	return dims; 
+}
 INT Scalar::size() {return m_N; } 
 cdouble* Scalar::getLocal() {return m_local; } 
 double Scalar::memory() {

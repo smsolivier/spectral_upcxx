@@ -46,7 +46,11 @@ public:
 	Vector laplacian(); 
 
 	/// get size per processor 
-	INT sizePerProcessor(); 
+	INT localSize(); 
+	/// get dimensions 
+	array<INT,DIM> getDims(); 
+	/// get parallel truncated dimensions 
+	array<INT,DIM> getPDims(); 
 	/// get total size 
 	INT size(); 
 	/// get pointer to local data
@@ -97,6 +101,9 @@ private:
 
 	/// store if in physical/fourier space 
 	bool m_fourier; 
+
+	/// store if memory is allocated with init 
+	bool m_initialized; 
 }; 
 
 #endif
