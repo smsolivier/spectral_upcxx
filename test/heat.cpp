@@ -25,7 +25,6 @@ int main(int argc, char* argv[]) {
 	double hy = hx; 
 	double hz = hx; 
 	array<INT,DIM> ind = {0,0,0}; 
-	Timer timer_set("set"); 
 	for (ind[2]=mrank*Nz; ind[2]<(mrank+1)*Nz; ind[2]++) {
 		double z = hz*ind[2]; 
 		for (ind[1]=0; ind[1]<dims[1]; ind[1]++) {
@@ -38,10 +37,10 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-	timer_set.stop(); 
 
 	Writer writer("solution"); 
 	writer.add(u, "u"); 
+	writer.setFreq(5); 
 
 	u0.forward(); 
 

@@ -76,10 +76,8 @@ void Scalar::operator=(Scalar& scalar) {
 	Timer deepcopy("deep copy");  
 	init(scalar.getDims(), scalar.isPhysical()); 
 
-	// copy data over 
-	for (INT i=0; i<m_dSize; i++) {
-		(*this)[i] = scalar[i]; 
-	}
+	// memcpy local data 
+	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
 }
 
 void Scalar::set(array<INT,DIM> index, cdouble val) {
@@ -124,6 +122,7 @@ array<int,DIM> Scalar::freq(array<INT,DIM> ind) {
 }
 
 void Scalar::forward() {
+	Timer forward("forward transform"); 
 	if (isFourier()) {
 		cout << "ERROR (Scalar.cpp): already in fourier space" << endl; 
 		upcxx::finalize(); 
@@ -134,6 +133,7 @@ void Scalar::forward() {
 }
 
 void Scalar::inverse() {
+	Timer inverse("inverse transform"); 
 	if (isPhysical()) {
 		cout << "ERROR (Scalar.cpp): already in physical space" << endl; 
 		upcxx::finalize(); 
