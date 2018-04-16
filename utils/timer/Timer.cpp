@@ -58,7 +58,9 @@ TimerParent::~TimerParent() {
 		m_el = chrono::system_clock::now() - m_start; 
 		cout << "Wall Time = " << m_el.count() << " seconds" << endl; 		
 	}
-	print(); 
+
+	if (getenv("TIMER") != NULL) 
+		print(); 
 }
 
 void TimerParent::add(TimerData data) {
