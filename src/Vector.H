@@ -11,6 +11,8 @@ public:
 	Vector(array<INT,DIM> dims, bool physical=true); 
 	/// index into the components of the vector 
 	Scalar& operator[](int a_i); 
+	/// copy constructor 
+	void operator=(Vector& a_v); 
 
 	/// component wise transform to fourier space 
 	void forward(); 
@@ -42,6 +44,10 @@ public:
 	array<cdouble*,DIM> getLocal(); 
 	/// get full dimensions 
 	array<INT,DIM> getDims(); 
+	/// get local parallel truncated start 
+	array<INT,DIM> getPStart(); 
+	/// get local parallel truncated end 
+	array<INT,DIM> getPEnd(); 
 	/// get parallel truncated dimensions 
 	array<INT,DIM> getPDims(); 
 private:

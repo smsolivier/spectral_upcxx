@@ -7,7 +7,7 @@
 
 // #define TRANSPOSE
 // #define SLABS
-// #define PENCILS
+#define PENCILS
 
 Scalar::Scalar() {
 	m_initialized = false; 
@@ -24,6 +24,7 @@ Scalar::Scalar(array<INT,DIM> N, bool physical) {
 
 void Scalar::init(array<INT,DIM> N, bool physical) {
 	m_initialized = true; 
+	m_rank = upcxx::rank_me(); 
 #ifdef OMP 
 	int nthreads; 
 	#pragma omp parallel 
@@ -44,6 +45,8 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	// number of x,y slabs per rank 
 	m_Nz = ceil((double)m_dims[2]/upcxx::rank_n()); 
 	m_Ny = m_dims[1]/upcxx::rank_n(); 
+
+	m_pdims = {m_dims[0], m_dims[1], m_Nz}; 
 
 	// number of entries per process
 	m_dSize = m_Nz*m_dims[0]*m_dims[1]; 
@@ -92,7 +95,7 @@ void Scalar::set(array<INT,DIM> index, cdouble val) {
 	}
 }
 
-cdouble Scalar::operator[](array<INT,DIM> index) {
+cdouble& Scalar::operator[](array<INT,DIM> index) {
 	INT rank, loc; 
 	getIndex(index, rank, loc); 
 
@@ -100,7 +103,10 @@ cdouble Scalar::operator[](array<INT,DIM> index) {
 	if (rank == upcxx::rank_me()) {
 		return m_local[loc]; 
 	} else {
-		return upcxx::rget(m_ptrs[rank]+loc).wait(); 
+		// return upcxx::rget(m_ptrs[rank]+loc).wait(); 
+		cerr << "ERROR (Scalar.cpp): accessing non-local index" << endl; 
+		upcxx::finalize(); 
+		exit(0); 
 	}
 }
 
@@ -111,8 +117,8 @@ cdouble& Scalar::operator[](INT index) {
 	return m_local[index]; 
 }
 
-array<int,DIM> Scalar::freq(array<INT,DIM> ind) {
-	array<int,DIM> k; 
+array<double,DIM> Scalar::freq(array<INT,DIM> ind) {
+	array<double,DIM> k; 
 	for (int i=0; i<DIM; i++) {
 		if (ind[i] <= m_dims[i]/2) k[i] = ind[i]; 
 		else k[i] = -m_dims[i] + ind[i]; 
@@ -170,12 +176,99 @@ void Scalar::add(Scalar& a) {
 	}
 }
 
+Vector Scalar::gradient() {
+	Timer grad_timer("scalar gradient"); 
+
+	if (!isFourier()) {
+		cerr << "ERROR (Scalar.cpp): scalar must be in fourier space for gradient" << endl; 
+		upcxx::finalize(); 
+		exit(0); 
+	}
+
+	// return a vector in fourier space 
+	Vector v(m_dims, false); 
+	cdouble imag(0,1.); 
+	array<INT,DIM> ind = {0,0,0}; 
+	// #pragma omp parallel for 
+	for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
+		for (ind[1]=0; ind[1]<m_pdims[1]; ind[1]++) {
+			for (ind[0]=0; ind[0]<m_pdims[0]; ind[0]++) {
+				array<double,DIM> k = freq(ind); 
+				for (int i=0; i<DIM; i++) {
+					v[i][ind] = imag*k[i]*(*this)[ind]; 
+				}
+			}
+		}
+	}
+	return v; 
+}
+
+Scalar Scalar::laplacian() {
+	Timer lap_timer("scalar laplacian"); 
+
+	if (!isFourier()) {
+		cerr << "ERROR (Scalar.cpp): scalar must be in fourier space for laplacian" << endl; 
+		upcxx::finalize(); 
+		exit(0); 
+	}
+
+	// return scalar in fourier space 
+	Scalar lap(m_dims, false); 
+	array<INT,DIM> ind = {0,0,0}; 
+	array<double,DIM> k; 
+	for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
+		for (ind[1]=0; ind[1]<m_pdims[1]; ind[1]++) {
+			for (ind[0]=0; ind[0]<m_pdims[0]; ind[0]++) {
+				k = freq(ind); 
+				lap[ind] = -(k[0]*k[0]+k[1]*k[1]+k[2]*k[2])*
+					(*this)[ind]; 
+			}
+		}
+	}
+	return lap; 
+}
+
+void Scalar::zeroHighModes() {
+	array<INT,DIM> half = m_dims; 
+	for (int i=0; i<DIM; i++) {
+		half[i] /= 2; 
+	}
+
+	// zero out x 
+	array<INT,DIM> ind = {half[0],0,0}; 
+	for (ind[1]=0; ind[1]<m_dims[1]; ind[1]++) {
+		for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
+			(*this)[ind] = 0; 
+		}
+	}
+
+	// zero out y 
+	ind = {0,half[1],0}; 
+	for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
+		for (ind[0]=0; ind[0]<m_dims[0]; ind[0]++) {
+			(*this)[ind] = 0; 
+		}
+	}
+
+	// zero out z 
+	ind = {0,0,half[2]}; 
+	for (ind[1]=0; ind[1]<m_dims[1]; ind[1]++) {
+		for (ind[0]=0; ind[0]<m_dims[0]; ind[0]++) {
+			(*this)[ind] = 0; 
+		}
+	}
+}
+
 INT Scalar::localSize() {return m_dSize; } 
 array<INT,DIM> Scalar::getDims() {return m_dims; }
-array<INT,DIM> Scalar::getPDims() {
-	array<INT,DIM> dims = m_dims; 
-	dims[2] = m_Nz; 
-	return dims; 
+array<INT,DIM> Scalar::getPDims() {return m_pdims; }
+array<INT,DIM> Scalar::getPStart() {
+	array<INT,DIM> start = {0,0,upcxx::rank_me()*m_Nz}; 
+	return start; 
+}
+array<INT,DIM> Scalar::getPEnd() {
+	array<INT,DIM> end = {m_dims[0], m_dims[1], (upcxx::rank_me()+1)*m_Nz}; 
+	return end; 
 }
 INT Scalar::size() {return m_N; } 
 cdouble* Scalar::getLocal() {return m_local; } 
@@ -255,11 +348,9 @@ void Scalar::transform(int DIR) {
 		}
 	}
 #elif defined PENCILS & defined OMP 
-	cout << "PENCILS doesn't work " << endl; 
-	#pragma omp parallel 
+	#pragma omp parallel
 	{
-		upcxx::future<> f = upcxx::make_future(); 
-		#pragma omp for 
+		upcxx::future<> fut = upcxx::make_future(); 
 		for (INT k=0; k<m_Nz; k++) {
 			for (INT j=0; j<m_dims[1]; j++) {
 				cdouble* row = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
@@ -269,15 +360,16 @@ void Scalar::transform(int DIR) {
 				INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
 					k*m_dims[0]*Ny + 
 					m_dims[0]*row_num; 
+				if (loc >= m_N) cout << "out of range" << endl; 
 				if (send_to == upcxx::rank_me()) {
 					memcpy(tlocal+loc, row, m_dims[0]*sizeof(cdouble)); 
 				} else {
-					f = upcxx::when_all(f, 
+					fut = upcxx::when_all(fut, 
 						upcxx::rput(row, tmp[send_to]+loc, m_dims[0])); 
 				}
 			}
 		}
-		f.wait(); 
+		fut.wait();
 	}
 #else
 	upcxx::future<> fut = upcxx::make_future(); 

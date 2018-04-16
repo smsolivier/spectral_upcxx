@@ -40,7 +40,8 @@ int main () {
 	}
 
 	// --- send rank 0's data to rank 1 in parallel with OpenMP --- 
-	if (upcxx::rank_me() == 0) {
+	// if (upcxx::rank_me() == 0) {
+		int orank = (upcxx::rank_me() + 1) % upcxx::rank_n(); 
 		#pragma omp parallel 
 		{
 			int tid = omp_get_thread_num(); // OMP thread id 
@@ -59,7 +60,7 @@ int main () {
 
 				// if (tid == 0) // no issues when only sent from thread 0 
 				// if (tid == 1) // issues if only sending from thread 1 
-				f = upcxx::when_all(f, upcxx::rput(local+i, ptrs[1]+i, 1)); 
+				f = upcxx::when_all(f, upcxx::rput(local+i, ptrs[orank]+i, 1)); 
 
 				#pragma omp critical 
 				cout << "sent message " << i << " from " << tid << endl; 
@@ -77,7 +78,7 @@ int main () {
 			#pragma omp critical 
 			cout << tid << " is past the barrier" << endl; 
 		} // end OMP parallel region 
-	}
+	// }
 	upcxx::barrier(); // make sure rank 0 done before checking for correctness 
 
 	// --- ensure correctness --- 

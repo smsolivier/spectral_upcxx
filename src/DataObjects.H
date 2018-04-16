@@ -11,5 +11,6 @@ class Vector;
 
 #include "Scalar.H"
 #include "Vector.H"
+#include "Operators.H"
 
 #endif

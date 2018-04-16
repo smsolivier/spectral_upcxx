@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
 		for (ind[2]=mrank*Nz; ind[2]<(mrank+1)*Nz; ind[2]++) {
 			for (ind[1]=0; ind[1]<dims[1]; ind[1]++) {
 				for (ind[0]=0; ind[0]<dims[0]; ind[0]++) {
-					array<int,DIM> k = u.freq(ind); 
+					array<double,DIM> k = u.freq(ind); 
 					u.set(ind, 
 						u0[ind]*exp(-(k[0]*k[0] + k[1]*k[1] + k[2]*k[2])*T)); 
 				}

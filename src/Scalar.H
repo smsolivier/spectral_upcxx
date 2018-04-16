@@ -21,11 +21,11 @@ public:
 	/// set a value in the distributed array 
 	void set(array<INT,DIM> index, cdouble val); 
 	/// get an element from the distributed array 
-	cdouble operator[](array<INT,DIM> index); 
+	cdouble& operator[](array<INT,DIM> index); 
 	/// direct access to local pointer 
 	cdouble& operator[](INT index); 
 	/// return frequency for grid point ind 
-	array<int,DIM> freq(array<INT,DIM> ind); 
+	array<double,DIM> freq(array<INT,DIM> ind); 
 
 	/// in place forward transform 
 	void forward(); 
@@ -43,7 +43,10 @@ public:
 	/// compute gradient \f$ \nabla f \f$. Returns in fourier space 
 	Vector gradient(); 
 	/// compute laplacian: \f$ \nabla^2 f \f$. Returns in fourier space 
-	Vector laplacian(); 
+	Scalar laplacian(); 
+
+	/// zero out the highest modes 
+	void zeroHighModes(); 
 
 	/// get size per processor 
 	INT localSize(); 
@@ -51,6 +54,10 @@ public:
 	array<INT,DIM> getDims(); 
 	/// get parallel truncated dimensions 
 	array<INT,DIM> getPDims(); 
+	/// get beginning of local truncated dimensions 
+	array<INT,DIM> getPStart(); 
+	/// get end of truncated local dimensions
+	array<INT,DIM> getPEnd(); 
 	/// get total size 
 	INT size(); 
 	/// get pointer to local data
@@ -86,6 +93,8 @@ private:
 	INT m_dSize; 
 	/// dimensions of array in x, y, z 
 	array<INT,DIM> m_dims; 
+	/// parallel truncated dimensions 
+	array<INT,DIM> m_pdims; 
 	/// global pointers to z slabs 
 	vector<upcxx::global_ptr<cdouble>> m_ptrs; 
 	/// local version of m_ptrs[rank_me()] 
@@ -98,6 +107,8 @@ private:
 	FFT1D m_fft_y; 
 	/// fft for striding in z 
 	FFT1D m_fft_z; 
+	/// store upcxx rank 
+	int m_rank; 
 
 	/// store if in physical/fourier space 
 	bool m_fourier; 
