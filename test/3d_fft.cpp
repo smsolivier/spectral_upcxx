@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 	// 		}
 	// 	}
 	// }
-	for (INT i=0; i<d.sizePerProcessor(); i++) {
+	for (INT i=0; i<d.localSize(); i++) {
 		d[i] = (double)rand()/RAND_MAX; 
 		ans[i] = d[i]; 
 	}
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
 	if (mrank == 0) wrong_ptr = upcxx::new_array<bool>(upcxx::rank_n()); 
 	wrong_ptr = upcxx::broadcast(wrong_ptr, 0).wait(); 
 	bool wrong = false; 
-	for (int i=0; i<d.sizePerProcessor(); i++) {
+	for (int i=0; i<d.localSize(); i++) {
 		if (abs(d[i] - ans[i]) > 1e-3) wrong = true; 
 	}
 	upcxx::rput(wrong, wrong_ptr+mrank).wait(); 
