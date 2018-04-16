@@ -35,6 +35,14 @@ void Vector::inverse() {
 	}
 }
 
+void Vector::forward(Vector& a_vector) {
+
+}
+
+void Vector::inverse(Vector& a_vector) {
+
+}
+
 bool Vector::isFourier() {
 	bool fourier = true; 
 	for (int i=0; i<DIM; i++) {
@@ -58,6 +66,9 @@ array<cdouble*,DIM> Vector::getLocal() {
 	}
 	return ret; 
 }
+
+array<INT,DIM> Vector::getDims() {return m_vector[0].getDims(); }
+array<INT,DIM> Vector::getPDims() {return m_vector[0].getPDims(); }
 
 void Vector::setPhysical() {
 	for (int i=0; i<DIM; i++) {

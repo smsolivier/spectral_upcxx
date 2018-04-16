@@ -15,7 +15,12 @@ public:
 	/// component wise transform to fourier space 
 	void forward(); 
 	/// component wise transform to physical space 
-	void inverse(); 
+	void inverse();
+
+	/// component wise out of place transform to fourier space 
+	void forward(Vector& a_vector); 
+	/// component wise out of place transform to physical space 
+	void inverse(Vector& a_vector);  
 
 	/// cross product of two vectors (\f$ (*this) \times a_v\f$) 
 	/** does cross product in physical space. returns in fourier space **/ 
@@ -35,6 +40,10 @@ public:
 
 	/// direct access to local data 
 	array<cdouble*,DIM> getLocal(); 
+	/// get full dimensions 
+	array<INT,DIM> getDims(); 
+	/// get parallel truncated dimensions 
+	array<INT,DIM> getPDims(); 
 private:
 	/// flag (*this) as in fourier space 
 	void setFourier(); 
