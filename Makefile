@@ -29,6 +29,13 @@ ifdef MEASURE
 CFLAGS += -DMEASURE 
 endif
 
+# write VTK files in text 
+ifdef VISIT_ASCII
+CFLAGS += -DVISIT_ASCII=0 
+else 
+CFLAGS += -DVISIT_ASCII=1
+endif 
+
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
 FFTW_LIB = -L$(FFTW_HOME)/lib -lfftw3 
