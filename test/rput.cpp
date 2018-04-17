@@ -43,10 +43,13 @@ int main () {
 	upcxx::barrier(); 
 
 	// --- send rank 0's data to rank 1 in parallel with OpenMP --- 
-	if (upcxx::rank_me() == 0) {
+	// if (upcxx::rank_me() == 0) {
 		int orank = (upcxx::rank_me() + 1) % upcxx::rank_n(); // rank to send to 
 		#pragma omp parallel 
 		{
+			// workaround 
+			upcxx::default_persona_scope();
+
 			int tid = omp_get_thread_num(); // OMP thread id 
 			upcxx::future<> f = upcxx::make_future(); // setup future chain 
 
@@ -81,7 +84,7 @@ int main () {
 			#pragma omp critical 
 			cout << tid << " is past the barrier" << endl; 
 		} // end OMP parallel region 
-	}
+	// }
 	upcxx::barrier(); // make sure rank 0 done before checking for correctness 
 
 	// --- ensure correctness --- 
