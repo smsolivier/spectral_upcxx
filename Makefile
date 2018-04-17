@@ -36,6 +36,11 @@ else
 CFLAGS += -DVISIT_ASCII=1
 endif 
 
+# zero highest mode out 
+ifdef ZERO 
+CFLAGS += -DZERO
+endif
+
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
 FFTW_LIB = -L$(FFTW_HOME)/lib -lfftw3 
@@ -81,7 +86,7 @@ clean :
 	rm -f *.exe *.vtk *.visit *.time
 cleantree :
 	rm -rf $(DEPDIR) $(OBJDIR) $(HOME)/test/*.vtk $(HOME)/test/*.visit \
-		$(HOME)/test/*.exe
+		$(HOME)/test/*.exe $(HOME)/exec/*.vtk $(HOME)/exec/*.exe $(HOME)/exec/*.visit
 
 -include $(DEPS)
 
