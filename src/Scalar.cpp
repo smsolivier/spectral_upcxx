@@ -5,25 +5,51 @@
 #endif
 #include "Timer.H"
 
+#define ERROR(message) \
+	cout << "ERROR in " << __func__ << " (" << __FILE__ \
+		<< " " << __LINE__ << ", r" << upcxx::rank_me() << "): " << message << endl; \
+	upcxx::finalize(); \
+	exit(0);
+
 // #define TRANSPOSE
 // #define SLABS
-#define PENCILS
+// #define PENCILS
 
 Scalar::Scalar() {
 	m_initialized = false; 
-}
-
-Scalar::~Scalar() {
-	if (m_initialized)
-		upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
 }
 
 Scalar::Scalar(array<INT,DIM> N, bool physical) {
 	init(N, physical); 
 }
 
+Scalar::~Scalar() {
+	if (m_initialized)
+		upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
+	m_nscalars--; 
+	m_initialized = false; 
+}
+
+Scalar::Scalar(const Scalar& scalar) {
+	Timer timer("copy constructor"); 
+	init(scalar.getDims(), scalar.isPhysical()); 
+
+	// memcpy local data 
+	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
+}
+
+void Scalar::operator=(const Scalar& scalar) {
+	Timer deepcopy("deep copy"); 
+	if (!m_initialized)
+		init(scalar.getDims(), scalar.isPhysical()); 
+
+	// memcpy local data 
+	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
+}
+
 void Scalar::init(array<INT,DIM> N, bool physical) {
 	m_initialized = true; 
+	m_nscalars++; 
 	m_rank = upcxx::rank_me(); 
 #ifdef OMP 
 	int nthreads; 
@@ -73,14 +99,8 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 
 	if (physical) setPhysical(); 
 	else setFourier(); 
-}
 
-void Scalar::operator=(Scalar& scalar) {
-	Timer deepcopy("deep copy");  
-	init(scalar.getDims(), scalar.isPhysical()); 
-
-	// memcpy local data 
-	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
+	upcxx::barrier(); 
 }
 
 void Scalar::set(array<INT,DIM> index, cdouble val) {
@@ -95,6 +115,18 @@ void Scalar::set(array<INT,DIM> index, cdouble val) {
 	}
 }
 
+cdouble Scalar::get(array<INT,DIM> index) const {
+	INT rank, loc; 
+	getIndex(index, rank, loc); 
+
+	// only do rget if not a local index 
+	if (rank == upcxx::rank_me()) {
+		return m_local[loc]; 
+	} else {
+		return upcxx::rget(m_ptrs[rank]+loc).wait(); 
+	}
+}
+
 cdouble& Scalar::operator[](array<INT,DIM> index) {
 	INT rank, loc; 
 	getIndex(index, rank, loc); 
@@ -103,25 +135,41 @@ cdouble& Scalar::operator[](array<INT,DIM> index) {
 	if (rank == upcxx::rank_me()) {
 		return m_local[loc]; 
 	} else {
-		// return upcxx::rget(m_ptrs[rank]+loc).wait(); 
-		cerr << "ERROR (Scalar.cpp): accessing non-local index" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("accessed non-local index use set/get"); 
+	}
+}
+
+cdouble Scalar::operator[](array<INT,DIM> index) const {
+	INT rank, loc; 
+	getIndex(index, rank, loc); 
+
+	// only do rget if not a local index 
+	if (rank == upcxx::rank_me()) {
+		return m_local[loc]; 
+	} else {
+		ERROR("accessed non-local index use get"); 
 	}
 }
 
 cdouble& Scalar::operator[](INT index) {
 	if (index >= m_dSize) {
-		cout << "ERROR (Scalar.cpp): index out of range in direct access operator" << endl; 
+		ERROR("accessed out of local data"); 
 	}
 	return m_local[index]; 
 }
 
-array<double,DIM> Scalar::freq(array<INT,DIM> ind) {
+cdouble Scalar::operator[](INT index) const {
+	if (index >= m_dSize) {
+		ERROR("accessed out of local data"); 
+	}
+	return m_local[index]; 
+}
+
+array<double,DIM> Scalar::freq(array<INT,DIM> ind) const {
 	array<double,DIM> k; 
 	for (int i=0; i<DIM; i++) {
-		if (ind[i] <= m_dims[i]/2) k[i] = ind[i]; 
-		else k[i] = -m_dims[i] + ind[i]; 
+		if (ind[i] < m_dims[i]/2) k[i] = (double)ind[i]; 
+		else k[i] = -1.*(double)m_dims[i] + (double)ind[i];
 	}
 
 	return k; 
@@ -130,20 +178,17 @@ array<double,DIM> Scalar::freq(array<INT,DIM> ind) {
 void Scalar::forward() {
 	Timer forward("forward transform"); 
 	if (isFourier()) {
-		cout << "ERROR (Scalar.cpp): already in fourier space" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("already in fourier space"); 
 	}
 	transform(1); 
+	zeroHighModes(); 
 	setFourier(); 
 }
 
 void Scalar::inverse() {
 	Timer inverse("inverse transform"); 
 	if (isPhysical()) {
-		cout << "ERROR (Scalar.cpp): already in physical space" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("already in physical space"); 
 	}
 	transform(-1); 
 
@@ -155,14 +200,14 @@ void Scalar::inverse() {
 	setPhysical(); 
 }
 
-void Scalar::forward(Scalar& a_scalar) {
+void Scalar::forward(Scalar& a_scalar) const {
 	// deep copy 
 	a_scalar = (*this); 
 
 	a_scalar.forward(); 
 }
 
-void Scalar::inverse(Scalar& a_scalar) {
+void Scalar::inverse(Scalar& a_scalar) const {
 	// deep copy 
 	a_scalar = (*this); 
 
@@ -176,23 +221,22 @@ void Scalar::add(Scalar& a) {
 	}
 }
 
-Vector Scalar::gradient() {
+Vector Scalar::gradient() const {
 	Timer grad_timer("scalar gradient"); 
 
 	if (!isFourier()) {
-		cerr << "ERROR (Scalar.cpp): scalar must be in fourier space for gradient" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("must begin gradient in fourier space"); 
 	}
 
 	// return a vector in fourier space 
 	Vector v(m_dims, false); 
 	cdouble imag(0,1.); 
 	array<INT,DIM> ind = {0,0,0}; 
-	// #pragma omp parallel for 
-	for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
-		for (ind[1]=0; ind[1]<m_pdims[1]; ind[1]++) {
-			for (ind[0]=0; ind[0]<m_pdims[0]; ind[0]++) {
+	array<INT,DIM> start = getPStart(); 
+	array<INT,DIM> end = getPEnd(); 
+	for (ind[2]=start[2]; ind[2]<end[2]; ind[2]++) {
+		for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
 				array<double,DIM> k = freq(ind); 
 				for (int i=0; i<DIM; i++) {
 					v[i][ind] = imag*k[i]*(*this)[ind]; 
@@ -203,13 +247,11 @@ Vector Scalar::gradient() {
 	return v; 
 }
 
-Scalar Scalar::laplacian() {
+Scalar Scalar::laplacian() const {
 	Timer lap_timer("scalar laplacian"); 
 
 	if (!isFourier()) {
-		cerr << "ERROR (Scalar.cpp): scalar must be in fourier space for laplacian" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("must begin laplacian in fourier space"); 
 	}
 
 	// return scalar in fourier space 
@@ -228,10 +270,32 @@ Scalar Scalar::laplacian() {
 	return lap; 
 }
 
+void Scalar::laplacian_inverse(double a, double b) {
+	array<INT,DIM> start = getPStart(); 
+	array<INT,DIM> end = getPEnd(); 
+	array<INT,DIM> ind; 
+	array<double,DIM> k; 
+	for (ind[2]=start[2]; ind[2]<end[2]; ind[2]++) {
+		for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
+				k = freq(ind); 
+				double sum = 0; 
+				for (int d=0; d<DIM; d++) {
+					sum += k[d]*k[d]; 
+				}
+				if (sum != 0) {
+					(*this)[ind] /= (a - b*sum); 
+				}
+			}
+		}
+	}
+}
+
 void Scalar::zeroHighModes() {
-	array<INT,DIM> half = m_dims; 
+#ifdef ZERO
+	array<INT,DIM> half; 
 	for (int i=0; i<DIM; i++) {
-		half[i] /= 2; 
+		half[i] = m_dims[i]/2; 
 	}
 
 	// zero out x 
@@ -252,36 +316,41 @@ void Scalar::zeroHighModes() {
 
 	// zero out z 
 	ind = {0,0,half[2]}; 
+	INT rank, loc; 
+	getIndex(ind, rank, loc); 
+	if (rank != upcxx::rank_me()) return; 
 	for (ind[1]=0; ind[1]<m_dims[1]; ind[1]++) {
 		for (ind[0]=0; ind[0]<m_dims[0]; ind[0]++) {
 			(*this)[ind] = 0; 
 		}
 	}
+#endif
 }
 
-INT Scalar::localSize() {return m_dSize; } 
-array<INT,DIM> Scalar::getDims() {return m_dims; }
-array<INT,DIM> Scalar::getPDims() {return m_pdims; }
-array<INT,DIM> Scalar::getPStart() {
+INT Scalar::localSize() const {return m_dSize; } 
+array<INT,DIM> Scalar::getDims() const {return m_dims; }
+array<INT,DIM> Scalar::getPDims() const {return m_pdims; }
+array<INT,DIM> Scalar::getPStart() const {
 	array<INT,DIM> start = {0,0,upcxx::rank_me()*m_Nz}; 
 	return start; 
 }
-array<INT,DIM> Scalar::getPEnd() {
+array<INT,DIM> Scalar::getPEnd() const {
 	array<INT,DIM> end = {m_dims[0], m_dims[1], (upcxx::rank_me()+1)*m_Nz}; 
 	return end; 
 }
-INT Scalar::size() {return m_N; } 
-cdouble* Scalar::getLocal() {return m_local; } 
-double Scalar::memory() {
+INT Scalar::size() const {return m_N; } 
+cdouble* Scalar::getLocal() const {return m_local; } 
+double Scalar::memory() const {
 	if (upcxx::rank_me() == 0) {
-		cout << "memory requirement = " << (double)m_N*sizeof(cdouble)/1e9 << " GB" << endl; 
+		cout << "memory requirement = " << 
+			(double)m_nscalars*(double)m_N*sizeof(cdouble)/1e9 << " GB" << endl; 
 	}
 }
 
 void Scalar::setPhysical() {m_fourier = false; }
 void Scalar::setFourier() {m_fourier = true; }
-bool Scalar::isPhysical() {return !m_fourier; }
-bool Scalar::isFourier() {return m_fourier; } 
+bool Scalar::isPhysical() const {return !m_fourier; }
+bool Scalar::isFourier() const {return m_fourier; } 
 
 void Scalar::transform(int DIR) {
 	// store transposed data in tmp 
@@ -360,7 +429,6 @@ void Scalar::transform(int DIR) {
 				INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
 					k*m_dims[0]*Ny + 
 					m_dims[0]*row_num; 
-				if (loc >= m_N) cout << "out of range" << endl; 
 				if (send_to == upcxx::rank_me()) {
 					memcpy(tlocal+loc, row, m_dims[0]*sizeof(cdouble)); 
 				} else {
@@ -382,7 +450,6 @@ void Scalar::transform(int DIR) {
 			INT loc = upcxx::rank_me()*m_Nz*m_dims[0]*Ny + 
 				k*m_dims[0]*Ny + 
 				m_dims[0]*row_num; 
-			if (loc >= m_N) cout << "out of range" << endl; 
 			if (send_to == upcxx::rank_me()) {
 				memcpy(tlocal+loc, row, m_dims[0]*sizeof(cdouble)); 
 			} else {
@@ -458,9 +525,9 @@ void Scalar::transform(int DIR) {
 	cout << "transpose back" << endl; 
 #endif
 
-	// clean up temp variable 
-	upcxx::barrier(); 
 	upcxx::delete_array(tmp[upcxx::rank_me()]);
+
+	upcxx::barrier(); 
 #ifdef VERBOSE
 	cout << "completed transform in " << DIR << " direction" << endl; 
 #endif
@@ -498,14 +565,13 @@ void Scalar::transposeZ2X(cdouble* f) {
 	delete(tmp); 
 }
 
-void Scalar::getIndex(array<INT,DIM> index, INT& rank, INT& loc) {
+void Scalar::getIndex(array<INT,DIM> index, INT& rank, INT& loc) const {
 	INT n = index[0] + m_dims[0]*index[1] + index[2]*m_dims[0]*m_dims[1]; 
 	if (n >= m_N) {
-		cout << "ERROR: index out of range in Scalar.cpp" << endl; 
-		cout << "n = " << n << endl; 
-		upcxx::finalize(); // close upcxx 
-		exit(0); // exit program 
+		ERROR("indexing out of full dimensions"); 
 	}
 	rank = n/m_dSize; // which rank owns the data 
 	loc = n % m_dSize; // remainder is index into the local array 
 }
+
+int Scalar::m_nscalars=0; 
