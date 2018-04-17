@@ -105,10 +105,11 @@ $(OBJDIR)/%.o : %.cpp $(HOME)/Makefile $(HOME)/make.inc
 	mv $*.d $(DEPDIR)
 
 clean :
-	rm -f *.exe *.vtk *.visit *.time
+	rm -f *.exe *.vtk *.visit time.table.*
 cleantree :
 	rm -rf $(DEPDIR) $(OBJDIR) $(HOME)/test/*.vtk $(HOME)/test/*.visit \
-		$(HOME)/test/*.exe $(HOME)/exec/*.vtk $(HOME)/exec/*.exe $(HOME)/exec/*.visit
+		$(HOME)/test/*.exe $(HOME)/exec/*.vtk $(HOME)/exec/*.exe \
+		$(HOME)/exec/*.visit $(HOME)/exec/time.table.* $(HOME)/test/time.table.*
 
 -include $(DEPS)
 
