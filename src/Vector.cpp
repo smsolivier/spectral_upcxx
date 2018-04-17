@@ -1,9 +1,19 @@
 #include "DataObjects.H"
 #include "Timer.H"
 
-Vector::Vector() {} 
+#define ERROR(message) {\
+	cout << "ERROR in " << __func__ << " (" << __FILE__ \
+		<< " " << __LINE__ << ", r" << upcxx::rank_me() << "): " << message << endl; \
+	upcxx::finalize(); \
+	exit(0);}
+
+Vector::Vector() {}
 
 Vector::Vector(array<INT,DIM> dims, bool physical) {
+	init(dims, physical); 
+}
+
+void Vector::init(array<INT,DIM> dims, bool physical) {
 	m_dims = dims; 
 
 	// allocate scalars 
@@ -23,46 +33,40 @@ Vector::Vector(array<INT,DIM> dims, bool physical) {
 }
 
 Scalar& Vector::operator[](int c) {return m_vector[c]; }
-
-void Vector::operator=(Vector& a_v) {
-	// call deep copy on each component 
-	for (int i=0; i<DIM; i++) {
-		m_vector[i] = a_v[i]; 
-	}
-}
+const Scalar& Vector::operator[](int c) const {return m_vector[c]; }
 
 void Vector::forward() {
 	for (int i=0; i<DIM; i++) {
 		m_vector[i].forward(); 
 	}
+	setFourier(); 
 }
 
 void Vector::inverse() {
 	for (int i=0; i<DIM; i++) {
 		m_vector[i].inverse(); 
 	}
+	setPhysical(); 
 }
 
-void Vector::forward(Vector& a_vector) {
+void Vector::forward(Vector& a_vector) const {
 	// deep copy 
 	a_vector = (*this); 
 
 	a_vector.forward(); 
 }
 
-void Vector::inverse(Vector& a_vector) {
+void Vector::inverse(Vector& a_vector) const {
 	// deep copy 
 	a_vector = (*this); 
 
 	a_vector.inverse(); 
 }
 
-Vector Vector::cross(Vector& a_v) {
+Vector Vector::cross(Vector& a_v) const {
 	Timer timer("cross product"); 
 	if (isPhysical() || a_v.isPhysical()) {
-		cerr << "ERROR (Vector.cpp): cross product must start in fourier space" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
+		ERROR("must start in fourier space"); 
 	} 
 
 	// make copies and transform to physical space 
@@ -84,7 +88,8 @@ Vector Vector::cross(Vector& a_v) {
 	return ret; 
 }
 
-Vector Vector::curl() {
+Vector Vector::curl() const {
+	if (!isFourier()) ERROR("must start in fourier space"); 
 	Timer timer("curl"); 
 
 	Vector x = (*this)[0].gradient(); 
@@ -101,14 +106,9 @@ Vector Vector::curl() {
 	return curl; 
 }
 
-Scalar Vector::divergence() {
+Scalar Vector::divergence() const {
+	if (!isFourier()) ERROR("must start in fourier space"); 
 	Timer timer("divergence"); 
-
-	if (!isFourier()) {
-		cerr << "ERROR (Vector.cpp): divergence must start in fourier space" << endl; 
-		upcxx::finalize(); 
-		exit(0); 
-	}
 
 	// return scalar in fourier space 
 	Scalar div(m_dims, false); 
@@ -122,8 +122,9 @@ Scalar Vector::divergence() {
 		for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
 			for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
 				k = m_vector[0].freq(i); 
+				div[i] = 0; 
 				for (int d=0; d<DIM; d++) {
-					div[i] += imag*(k[d]*(*this)[d][i]); 
+					div[i] += imag*k[d]*(*this)[d][i]; 
 				}
 			}
 		}
@@ -131,7 +132,8 @@ Scalar Vector::divergence() {
 	return div; 
 }
 
-Vector Vector::laplacian() {
+Vector Vector::laplacian() const {
+	if (!isFourier()) ERROR("must start in fourier space"); 
 	Timer timer("vector laplacian"); 
 
 	Vector lap(m_dims, false); 
@@ -152,7 +154,7 @@ Vector Vector::laplacian() {
 	return lap; 
 }
 
-bool Vector::isFourier() {
+bool Vector::isFourier() const {
 	bool fourier = true; 
 	for (int i=0; i<DIM; i++) {
 		if (!m_vector[i].isFourier()) fourier = false; 
@@ -160,7 +162,7 @@ bool Vector::isFourier() {
 	return fourier; 
 }
 
-bool Vector::isPhysical() {
+bool Vector::isPhysical() const {
 	bool physical = true; 
 	for (int i=0; i<DIM; i++) {
 		if (!m_vector[i].isPhysical()) physical = false; 
@@ -168,18 +170,18 @@ bool Vector::isPhysical() {
 	return false; 
 }
 
-array<cdouble*,DIM> Vector::getLocal() {
-	array<cdouble*,DIM> ret; 
-	for (int i=0; i<DIM; i++) {
-		ret[i] = m_vector[i].getLocal(); 
-	}
-	return ret; 
-}
+// array<cdouble*,DIM> Vector::getLocal() {
+// 	array<cdouble*,DIM> ret; 
+// 	for (int i=0; i<DIM; i++) {
+// 		ret[i] = m_vector[i].getLocal(); 
+// 	}
+// 	return ret; 
+// }
 
-array<INT,DIM> Vector::getDims() {return m_vector[0].getDims(); }
-array<INT,DIM> Vector::getPDims() {return m_vector[0].getPDims(); }
-array<INT,DIM> Vector::getPStart() {return m_vector[0].getPStart(); }
-array<INT,DIM> Vector::getPEnd() {return m_vector[0].getPEnd(); }
+array<INT,DIM> Vector::getDims() const {return m_vector[0].getDims(); }
+array<INT,DIM> Vector::getPDims() const {return m_vector[0].getPDims(); }
+array<INT,DIM> Vector::getPStart() const {return m_vector[0].getPStart(); }
+array<INT,DIM> Vector::getPEnd() const {return m_vector[0].getPEnd(); }
 
 void Vector::setPhysical() {
 	for (int i=0; i<DIM; i++) {
