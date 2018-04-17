@@ -6,3 +6,4 @@ obj/
 dep/
 *~
 /docs/doxygen
+time.table.*
