@@ -12,11 +12,13 @@ using namespace std;
 	Doesn't seg fault when: 
 		OMP_NUM_THREADS=1 
 		rput's are only called from the master OMP thread (uncomment if (tid == 0))
+		compiled with UPCXX_THREADMODE=seq
 
 	Seg faults when:
 		OMP_NUM_THREADS > 1 
 		send from only the non master thread (uncomment if (tid == 1)) 
 		rput's are wrapped in an #pragma omp critical region 
+		compiled with UPCXX_THREADMODE=par
 
 	the cout's suggest that it fails as soon as the non-master thread calls rput 
 */ 
@@ -31,7 +33,6 @@ int main () {
 	for (int i=0; i<upcxx::rank_n(); i++) {
 		ptrs[i] = upcxx::broadcast(ptrs[i], i).wait(); 
 	}
-	upcxx::barrier(); 
 
 	// initialize local to my rank 
 	int* local = ptrs[upcxx::rank_me()].local(); 
@@ -39,9 +40,11 @@ int main () {
 		local[i] = upcxx::rank_me(); 
 	}
 
+	upcxx::barrier(); 
+
 	// --- send rank 0's data to rank 1 in parallel with OpenMP --- 
-	// if (upcxx::rank_me() == 0) {
-		int orank = (upcxx::rank_me() + 1) % upcxx::rank_n(); 
+	if (upcxx::rank_me() == 0) {
+		int orank = (upcxx::rank_me() + 1) % upcxx::rank_n(); // rank to send to 
 		#pragma omp parallel 
 		{
 			int tid = omp_get_thread_num(); // OMP thread id 
@@ -78,7 +81,7 @@ int main () {
 			#pragma omp critical 
 			cout << tid << " is past the barrier" << endl; 
 		} // end OMP parallel region 
-	// }
+	}
 	upcxx::barrier(); // make sure rank 0 done before checking for correctness 
 
 	// --- ensure correctness --- 
