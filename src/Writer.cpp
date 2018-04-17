@@ -1,5 +1,5 @@
 #include "Writer.H"
-#include "Timer.H"
+#include "CH_Timer.H"
 #include <upcxx/upcxx.hpp> 
 #include "VisitWriter.H"
 
@@ -31,7 +31,7 @@ void Writer::add(Vector& a_vector, string a_name) {
 void Writer::setFreq(int a_f) {m_f = a_f; } 
 
 void Writer::write() {
-	Timer timer_write("write to VTK"); 
+	CH_TIMERS("write to vtk"); 
 
 	if (m_count++%m_f != 0) {
 		return; 

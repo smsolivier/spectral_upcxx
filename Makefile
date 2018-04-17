@@ -6,10 +6,12 @@ SRC = $(HOME)/src
 UTILS = $(HOME)/utils
 WRITER = $(UTILS)/VisitWriter
 TIMER = $(UTILS)/timer
+CHTIMER = $(UTILS)/chtimer
 
 # import settings from make.inc 
 CFLAGS += -DDIM=$(DIM) $(OPT)
 
+# use openmp threading 
 ifdef OMP
 CFLAGS += -fopenmp -DOMP
 endif
@@ -41,6 +43,26 @@ ifdef ZERO
 CFLAGS += -DZERO
 endif
 
+# use pencil global transpose 
+ifdef PENCILS
+CFLAGS += -DPENCILS
+endif 
+
+# use slabs in global transpose 
+ifdef SLABS 
+CFLAGS += -DSLABS
+endif 
+
+# transpose to contiguous in z before doing z transforms 
+ifdef TRANSPOSE 
+CFLAGS += -DTRANSPOSE 
+endif
+
+# enable CH_Timer 
+ifndef TIMER 
+CFLAGS += -DCH_NTIMER
+endif
+
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
 FFTW_LIB = -L$(FFTW_HOME)/lib -lfftw3 
@@ -62,14 +84,14 @@ UPC = $(shell upcxx-meta PPFLAGS) $(shell upcxx-meta LDFLAGS) \
 	$(shell upcxx-meta LIBFLAGS) 
 
 # look for source files in
-VPATH = $(SRC) $(WRITER) $(TIMER)
+VPATH = $(SRC) $(WRITER) $(TIMER) $(CHTIMER) 
 # look for includes in 
-CFLAGS += -I$(SRC) -I$(WRITER) -I$(TIMER)
+CFLAGS += -I$(SRC) -I$(WRITER) -I$(TIMER) -I$(CHTIMER)
 
 OBJDIR = $(HOME)/obj
 DEPDIR = $(HOME)/dep
 
-SRCFILES = $(notdir $(wildcard $(SRC)/*.cpp $(WRITER)/*.cpp $(TIMER)/*.cpp)) 
+SRCFILES = $(notdir $(wildcard $(SRC)/*.cpp $(WRITER)/*.cpp $(TIMER)/*.cpp $(CHTIMER)/*.cpp)) 
 OBJS = $(patsubst %.cpp, $(OBJDIR)/%.o, $(SRCFILES))
 DEPS = $(patsubst $(OBJDIR)/%.o, $(DEPDIR)/%.d, $(OBJS))
 

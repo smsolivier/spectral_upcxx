@@ -1,5 +1,5 @@
 #include "DataObjects.H"
-#include "Timer.H"
+#include "CH_Timer.H"
 
 #define ERROR(message) {\
 	cout << "ERROR in " << __func__ << " (" << __FILE__ \
@@ -64,7 +64,7 @@ void Vector::inverse(Vector& a_vector) const {
 }
 
 Vector Vector::cross(Vector& a_v) const {
-	Timer timer("cross product"); 
+	CH_TIMERS("cross product"); 
 	if (isPhysical() || a_v.isPhysical()) {
 		ERROR("must start in fourier space"); 
 	} 
@@ -89,8 +89,8 @@ Vector Vector::cross(Vector& a_v) const {
 }
 
 Vector Vector::curl() const {
+	CH_TIMERS("curl"); 
 	if (!isFourier()) ERROR("must start in fourier space"); 
-	Timer timer("curl"); 
 
 	Vector x = (*this)[0].gradient(); 
 	Vector y = (*this)[1].gradient(); 
@@ -107,8 +107,8 @@ Vector Vector::curl() const {
 }
 
 Scalar Vector::divergence() const {
+	CH_TIMERS("divergence"); 
 	if (!isFourier()) ERROR("must start in fourier space"); 
-	Timer timer("divergence"); 
 
 	// return scalar in fourier space 
 	Scalar div(m_dims, false); 
@@ -133,8 +133,8 @@ Scalar Vector::divergence() const {
 }
 
 Vector Vector::laplacian() const {
+	CH_TIMERS("vector laplacian"); 
 	if (!isFourier()) ERROR("must start in fourier space"); 
-	Timer timer("vector laplacian"); 
 
 	Vector lap(m_dims, false); 
 	array<INT,DIM> i = {0,0,0}; 

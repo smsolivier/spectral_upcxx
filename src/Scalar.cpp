@@ -3,17 +3,13 @@
 #ifdef OMP 
 #include <omp.h> 
 #endif
-#include "Timer.H"
+#include "CH_Timer.H"
 
 #define ERROR(message) \
 	cout << "ERROR in " << __func__ << " (" << __FILE__ \
 		<< " " << __LINE__ << ", r" << upcxx::rank_me() << "): " << message << endl; \
 	upcxx::finalize(); \
 	exit(0);
-
-// #define TRANSPOSE
-// #define SLABS
-// #define PENCILS
 
 Scalar::Scalar() {
 	m_initialized = false; 
@@ -31,7 +27,7 @@ Scalar::~Scalar() {
 }
 
 Scalar::Scalar(const Scalar& scalar) {
-	Timer timer("copy constructor"); 
+	CH_TIMERS("copy constructor"); 
 	init(scalar.getDims(), scalar.isPhysical()); 
 
 	// memcpy local data 
@@ -39,7 +35,7 @@ Scalar::Scalar(const Scalar& scalar) {
 }
 
 void Scalar::operator=(const Scalar& scalar) {
-	Timer deepcopy("deep copy"); 
+	CH_TIMERS("copy assignment"); 
 	if (!m_initialized)
 		init(scalar.getDims(), scalar.isPhysical()); 
 
@@ -48,6 +44,7 @@ void Scalar::operator=(const Scalar& scalar) {
 }
 
 void Scalar::init(array<INT,DIM> N, bool physical) {
+	CH_TIMERS("init"); 
 	m_initialized = true; 
 	m_nscalars++; 
 	m_rank = upcxx::rank_me(); 
@@ -90,12 +87,13 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	}
 
 	// setup FFTW plans 
-	Timer setup("setup FFTW plans"); 
-	m_fft_x.init(m_dims[0], 1, m_local); 
-	m_fft_y.init(m_dims[1], m_dims[0], m_local); 
-	// needs to by Ny 
-	m_fft_z.init(m_dims[2], m_dims[0]*m_Ny, m_local); 
-	setup.stop(); 
+	{
+		CH_TIMERS("setup FFTW plans"); 
+		m_fft_x.init(m_dims[0], 1, m_local); 
+		m_fft_y.init(m_dims[1], m_dims[0], m_local); 
+		// needs to by Ny 
+		m_fft_z.init(m_dims[2], m_dims[0]*m_Ny, m_local); 
+	}
 
 	if (physical) setPhysical(); 
 	else setFourier(); 
@@ -176,7 +174,6 @@ array<double,DIM> Scalar::freq(array<INT,DIM> ind) const {
 }
 
 void Scalar::forward() {
-	Timer forward("forward transform"); 
 	if (isFourier()) {
 		ERROR("already in fourier space"); 
 	}
@@ -186,7 +183,6 @@ void Scalar::forward() {
 }
 
 void Scalar::inverse() {
-	Timer inverse("inverse transform"); 
 	if (isPhysical()) {
 		ERROR("already in physical space"); 
 	}
@@ -222,8 +218,7 @@ void Scalar::add(Scalar& a) {
 }
 
 Vector Scalar::gradient() const {
-	Timer grad_timer("scalar gradient"); 
-
+	CH_TIMERS("gradient"); 
 	if (!isFourier()) {
 		ERROR("must begin gradient in fourier space"); 
 	}
@@ -248,8 +243,7 @@ Vector Scalar::gradient() const {
 }
 
 Scalar Scalar::laplacian() const {
-	Timer lap_timer("scalar laplacian"); 
-
+	CH_TIMERS("scalar laplacian"); 
 	if (!isFourier()) {
 		ERROR("must begin laplacian in fourier space"); 
 	}
@@ -271,6 +265,7 @@ Scalar Scalar::laplacian() const {
 }
 
 void Scalar::laplacian_inverse(double a, double b) {
+	CH_TIMERS("laplacian inverse"); 
 	array<INT,DIM> start = getPStart(); 
 	array<INT,DIM> end = getPEnd(); 
 	array<INT,DIM> ind; 
@@ -353,6 +348,7 @@ bool Scalar::isPhysical() const {return !m_fourier; }
 bool Scalar::isFourier() const {return m_fourier; } 
 
 void Scalar::transform(int DIR) {
+	CH_TIMERS("transform"); 
 	// store transposed data in tmp 
 	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n(), NULL);
 	// allocate global memory 
@@ -365,8 +361,9 @@ void Scalar::transform(int DIR) {
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
 	// --- transform columns --- 
-	Timer cols("columns"); 
 #ifdef OMP 
+	CH_TIMER("columns (OMP)", col); 
+	CH_START(col); 
 	#pragma omp parallel 
 	{
 		#pragma omp for 
@@ -377,7 +374,11 @@ void Scalar::transform(int DIR) {
 			}
 		}
 	}
+	CH_STOP(col); 
+
 #else
+	CH_TIMER("columns (serial)", col); 
+	CH_START(col); 
 	for (INT k=0; k<m_Nz; k++) {
 		for (INT i=0; i<m_dims[0]; i++) {
 			cdouble* start = m_local + i + k*m_dims[0]*m_dims[1]; 
@@ -386,17 +387,16 @@ void Scalar::transform(int DIR) {
 			m_fft_y.transform(start, DIR); 
 		}
 	}
+	CH_STOP(col); 
 #endif
-#ifdef VERBOSE
-	cout << "columns" << endl; 
-#endif
-	cols.stop(); 
+
 	upcxx::barrier(); 
 
 	// --- transforms rows and pencil transpose --- 
-	Timer rows("rows"); 
 	INT Ny = m_dims[1]/upcxx::rank_n(); 
 #if defined SLABS & defined OMP 
+	CH_TIMER("rows (slabs)", row); 
+	CH_START(row); 
 	// do each face in parallel and then serially send the whole face off (message size = Nx * Ny/p)
 	for (INT k=0; k<m_Nz; k++) {
 		#pragma omp parallel for 
@@ -416,10 +416,17 @@ void Scalar::transform(int DIR) {
 			}
 		}
 	}
+	CH_STOP(row); 
 #elif defined PENCILS & defined OMP 
+	CH_TIMER("rows (OMP pencils)", row); 
+	CH_START(row); 
 	#pragma omp parallel
 	{
-		upcxx::future<> fut = upcxx::make_future(); 
+		// threading workaround 
+		upcxx::default_persona_scope();
+
+		upcxx::future<> fut = upcxx::make_future();
+		#pragma omp for  
 		for (INT k=0; k<m_Nz; k++) {
 			for (INT j=0; j<m_dims[1]; j++) {
 				cdouble* row = m_local + j*m_dims[0] + k*m_dims[0]*m_dims[1]; 
@@ -439,7 +446,10 @@ void Scalar::transform(int DIR) {
 		}
 		fut.wait();
 	}
+	CH_STOP(row); 
 #else
+	CH_TIMER("rows (serial pencils)", row); 
+	CH_START(row); 
 	upcxx::future<> fut = upcxx::make_future(); 
 	for (INT k=0; k<m_Nz; k++) {
 		for (INT j=0; j<m_dims[1]; j++) {
@@ -459,19 +469,18 @@ void Scalar::transform(int DIR) {
 		}
 	}
 	fut.wait(); 
-#endif
-	rows.stop(); 
-	upcxx::barrier(); 
-#ifdef VERBOSE
-	cout << "rows" << endl; 
+	CH_STOP(row); 
 #endif
 
+	upcxx::barrier(); 
+
 	// --- transform in z direction --- 
-	Timer ztimer("z rows"); 
 #ifdef TRANSPOSE 
 	transposeX2Z(tlocal); 
 #endif
 #ifdef OMP 
+	CH_TIMER("z (OMP)", z); 
+	CH_START(z); 
 	#pragma omp parallel 
 	{
 		#pragma omp for 
@@ -486,25 +495,53 @@ void Scalar::transform(int DIR) {
 			}
 		}
 	}
+	CH_STOP(z); 
 #else 
+	CH_TIMER("z (serial)", z); 
+	CH_START(z); 
 	for (INT j=0; j<Ny; j++) {
 		for (INT i=0; i<m_dims[0]; i++) {
 			cdouble* zrow = tlocal + i + j*m_dims[0]; 
 			m_fft_z.transform(zrow, DIR); 
 		}
 	}
+	CH_STOP(z); 
 #endif
 #ifdef TRANSPOSE
 	transposeZ2X(tlocal); 
 #endif
-	ztimer.stop(); 
-	upcxx::barrier(); 
-#ifdef VERBOSE
-	cout << "z" << endl; 
-#endif
 
-	// switch back to original data layout (send slabs of Nx*Ny) 
-	Timer trans("transpose back"); 
+	upcxx::barrier(); 
+
+	// --- transpose back --- 
+#ifdef OMP
+	CH_TIMER("transpose back (OMP)", trans); 
+	CH_START(trans); 
+	#pragma omp parallel 
+	{
+		upcxx::default_persona_scope();
+
+		upcxx::future<> f = upcxx::make_future(); 
+		#pragma omp for 
+		for (INT k=0; k<m_dims[2]; k++) {
+			cdouble* slab = tlocal + k*Ny*m_dims[0]; 
+			INT send_to = k/m_Nz; 
+			INT rem = k % m_Nz; 
+			INT dest = upcxx::rank_me()*Ny*m_dims[0] + 
+				rem*m_dims[0]*m_dims[1]; 
+			if (send_to == upcxx::rank_me()) {
+				memcpy(m_local+dest, slab, m_dims[0]*Ny*sizeof(cdouble)); 
+			} else {
+				f = upcxx::when_all(f, 
+					upcxx::rput(slab, m_ptrs[send_to]+dest, m_dims[0]*Ny)); 
+			}
+		}
+		f.wait(); 
+	}
+	CH_STOP(trans); 
+#else 
+	CH_TIMER("transpose back (serial)", trans); 
+	CH_START(trans); 
 	upcxx::future<> f = upcxx::make_future(); 
 	for (INT k=0; k<m_dims[2]; k++) {
 		cdouble* slab = tlocal + k*Ny*m_dims[0]; 
@@ -520,20 +557,16 @@ void Scalar::transform(int DIR) {
 		}
 	}
 	f.wait(); 
-	trans.stop(); 
-#ifdef VERBOSE 
-	cout << "transpose back" << endl; 
+	CH_STOP(trans); 
 #endif
 
 	upcxx::delete_array(tmp[upcxx::rank_me()]);
 
 	upcxx::barrier(); 
-#ifdef VERBOSE
-	cout << "completed transform in " << DIR << " direction" << endl; 
-#endif
 }
 
 void Scalar::transposeX2Z(cdouble* f) {
+	CH_TIMERS("transpose to z contiguous"); 
 	/* assumes truncated direction is in y ie after global transpose step */ 
 	cdouble* tmp = new cdouble[m_dSize];
 	memcpy(tmp, f, m_dSize*sizeof(cdouble)); 
@@ -550,6 +583,7 @@ void Scalar::transposeX2Z(cdouble* f) {
 }
 
 void Scalar::transposeZ2X(cdouble* f) {
+	CH_TIMERS("transpose to x contiguous"); 
 	/* assumes truncated direction is in y ie after global transpose step */ 
 	cdouble* tmp = new cdouble[m_dSize];
 	memcpy(tmp, f, m_dSize*sizeof(cdouble)); 

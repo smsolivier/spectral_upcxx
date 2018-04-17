@@ -1,4 +1,11 @@
 CXX=g++
 DIM=3 
-# SILO_HOME=/shared/apps/silo
 FFTW_HOME=/shared/apps/fftw
+OPT=-O3 
+# OPT=-g
+OMP=1
+MEASURE=1
+# VERBOSE=1
+ZERO=1
+PENCILS=1
+# SLABS=1
