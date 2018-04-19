@@ -4,6 +4,7 @@
 #include <omp.h> 
 #endif
 #include "CH_Timer.H"
+#include <cassert> 
 
 #define ERROR(message) \
 	cout << "ERROR in " << __func__ << " (" << __FILE__ \
@@ -11,8 +12,21 @@
 	upcxx::finalize(); \
 	exit(0);
 
+double Scalar::average() const {
+	cdouble avg = 0; 
+	for (int i=0; i<localSize(); i++) {
+		avg += abs((*this)[i]); 
+	}
+
+	return avg.real()/(double)localSize(); 
+}
+
 Scalar::Scalar() {
 	m_initialized = false; 
+	m_ptrs.resize(upcxx::rank_n()); 
+	m_ptrs[upcxx::rank_me()] = nullptr; 
+	m_local = nullptr; 
+	m_rank = upcxx::rank_me(); 
 }
 
 Scalar::Scalar(array<INT,DIM> N, bool physical) {
@@ -20,10 +34,16 @@ Scalar::Scalar(array<INT,DIM> N, bool physical) {
 }
 
 Scalar::~Scalar() {
-	if (m_initialized)
-		upcxx::delete_array(m_ptrs[upcxx::rank_me()]); 
-	m_nscalars--; 
-	m_initialized = false; 
+	CH_TIMERS("destructor"); 
+	if (m_initialized) {
+		upcxx::delete_array(m_ptrs[upcxx::rank_me()]);
+
+		m_ptrs[upcxx::rank_me()] = nullptr; 
+		m_local = nullptr; 
+
+		m_nscalars--; 
+		m_initialized = false; 
+	}
 }
 
 Scalar::Scalar(const Scalar& scalar) {
@@ -31,13 +51,14 @@ Scalar::Scalar(const Scalar& scalar) {
 	init(scalar.getDims(), scalar.isPhysical()); 
 
 	// memcpy local data 
-	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
+	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble));
 }
 
 void Scalar::operator=(const Scalar& scalar) {
 	CH_TIMERS("copy assignment"); 
-	if (!m_initialized)
+	if (!m_initialized) {
 		init(scalar.getDims(), scalar.isPhysical()); 
+	}
 
 	// memcpy local data 
 	memcpy(m_local, scalar.getLocal(), m_dSize*sizeof(cdouble)); 
@@ -47,16 +68,9 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	CH_TIMERS("init"); 
 	m_initialized = true; 
 	m_nscalars++; 
+
 	m_rank = upcxx::rank_me(); 
-#ifdef OMP 
-	int nthreads; 
-	#pragma omp parallel 
-	{
-		#pragma omp master 
-		nthreads = omp_get_num_threads(); 
-	}
-	if (upcxx::rank_me() == 0) cout << "nthreads = " << nthreads << endl; 
-#endif
+
 	m_dims = N; 
 
 	// compute total size 
@@ -74,7 +88,6 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	// number of entries per process
 	m_dSize = m_Nz*m_dims[0]*m_dims[1]; 
 
-	// store a global pointer for every rank 
 	m_ptrs.resize(upcxx::rank_n()); 
 
 	// allocate memory for the slab (truncated in z) 
@@ -85,6 +98,7 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	for (INT i=0; i<upcxx::rank_n(); i++) {
 		m_ptrs[i] = upcxx::broadcast(m_ptrs[i], i).wait(); 
 	}
+	upcxx::barrier(); 
 
 	// setup FFTW plans 
 	{
@@ -149,6 +163,15 @@ cdouble Scalar::operator[](array<INT,DIM> index) const {
 	}
 }
 
+cdouble& Scalar::operator()(INT a_i, INT a_j, INT a_k) {
+	array<INT,DIM> index = {a_i, a_j, a_k}; 
+	return (*this)[index]; 
+}
+
+cdouble Scalar::operator()(INT a_i, INT a_j, INT a_k) const {
+	array<INT,DIM> index = {a_i, a_j, a_k}; 
+	return (*this)[index]; 
+}
 cdouble& Scalar::operator[](INT index) {
 	if (index >= m_dSize) {
 		ERROR("accessed out of local data"); 
@@ -166,7 +189,7 @@ cdouble Scalar::operator[](INT index) const {
 array<double,DIM> Scalar::freq(array<INT,DIM> ind) const {
 	array<double,DIM> k; 
 	for (int i=0; i<DIM; i++) {
-		if (ind[i] < m_dims[i]/2) k[i] = (double)ind[i]; 
+		if (ind[i] <= m_dims[i]/2) k[i] = (double)ind[i]; 
 		else k[i] = -1.*(double)m_dims[i] + (double)ind[i];
 	}
 
@@ -177,7 +200,7 @@ void Scalar::forward() {
 	if (isFourier()) {
 		ERROR("already in fourier space"); 
 	}
-	transform(1); 
+	transform(-1); 
 	zeroHighModes(); 
 	setFourier(); 
 }
@@ -186,7 +209,7 @@ void Scalar::inverse() {
 	if (isPhysical()) {
 		ERROR("already in physical space"); 
 	}
-	transform(-1); 
+	transform(1); 
 
 	// divide by N^3 
 	#pragma omp parallel for 
@@ -210,13 +233,6 @@ void Scalar::inverse(Scalar& a_scalar) const {
 	a_scalar.inverse(); 
 }
 
-void Scalar::add(Scalar& a) {
-	#pragma omp parallel for schedule(static)
-	for (INT i=0; i<m_dSize; i++) {
-		m_local[i] += a[i];  
-	}
-}
-
 Vector Scalar::gradient() const {
 	CH_TIMERS("gradient"); 
 	if (!isFourier()) {
@@ -225,16 +241,24 @@ Vector Scalar::gradient() const {
 
 	// return a vector in fourier space 
 	Vector v(m_dims, false); 
-	cdouble imag(0,1.); 
-	array<INT,DIM> ind = {0,0,0}; 
-	array<INT,DIM> start = getPStart(); 
-	array<INT,DIM> end = getPEnd(); 
-	for (ind[2]=start[2]; ind[2]<end[2]; ind[2]++) {
-		for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
-			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
-				array<double,DIM> k = freq(ind); 
-				for (int i=0; i<DIM; i++) {
-					v[i][ind] = imag*k[i]*(*this)[ind]; 
+
+	#pragma omp parallel 
+	{
+		cdouble imag(0,1.); 
+		array<INT,DIM> ind = {0,0,0}; 
+		array<INT,DIM> start = getPStart(); 
+		array<INT,DIM> end = getPEnd(); 
+		array<double,DIM> f; 
+
+		#pragma omp for 
+		for (INT k=start[2]; k<end[2]; k++) {
+			ind[2] = k; 
+			for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+				for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
+					f = freq(ind); 
+					for (int i=0; i<DIM; i++) {
+						v[i][ind] = imag*f[i]*(*this)[ind]; 
+					}
 				}
 			}
 		}
@@ -250,14 +274,22 @@ Scalar Scalar::laplacian() const {
 
 	// return scalar in fourier space 
 	Scalar lap(m_dims, false); 
-	array<INT,DIM> ind = {0,0,0}; 
-	array<double,DIM> k; 
-	for (ind[2]=m_rank*m_Nz; ind[2]<(m_rank+1)*m_Nz; ind[2]++) {
-		for (ind[1]=0; ind[1]<m_pdims[1]; ind[1]++) {
-			for (ind[0]=0; ind[0]<m_pdims[0]; ind[0]++) {
-				k = freq(ind); 
-				lap[ind] = -(k[0]*k[0]+k[1]*k[1]+k[2]*k[2])*
-					(*this)[ind]; 
+
+	#pragma omp parallel 
+	{
+		array<INT,DIM> ind = {0,0,0}; 
+		array<INT,DIM> start = getPStart(); 
+		array<INT,DIM> end = getPEnd(); 
+		array<double,DIM> f; 
+		#pragma omp for 
+		for (INT k=start[2]; k<end[2]; k++) {
+			for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+				for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
+					ind[2] = k; 
+					f = freq(ind); 
+					lap[ind] = -(f[0]*f[0]+f[1]*f[1]+f[2]*f[2])*
+						(*this)[ind]; 
+				}
 			}
 		}
 	}
@@ -266,20 +298,27 @@ Scalar Scalar::laplacian() const {
 
 void Scalar::laplacian_inverse(double a, double b) {
 	CH_TIMERS("laplacian inverse"); 
-	array<INT,DIM> start = getPStart(); 
-	array<INT,DIM> end = getPEnd(); 
-	array<INT,DIM> ind; 
-	array<double,DIM> k; 
-	for (ind[2]=start[2]; ind[2]<end[2]; ind[2]++) {
-		for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
-			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
-				k = freq(ind); 
-				double sum = 0; 
-				for (int d=0; d<DIM; d++) {
-					sum += k[d]*k[d]; 
-				}
-				if (sum != 0) {
-					(*this)[ind] /= (a - b*sum); 
+	
+
+	#pragma omp parallel 
+	{
+		array<INT,DIM> start = getPStart(); 
+		array<INT,DIM> end = getPEnd(); 
+		array<INT,DIM> ind; 
+		array<double,DIM> f; 
+		#pragma omp for 
+		for (INT k=start[2]; k<end[2]; k++) {
+			for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+				for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
+					ind[2] = k; 
+					f = freq(ind); 
+					double sum = 0; 
+					for (int d=0; d<DIM; d++) {
+						sum += f[d]*f[d]; 
+					}
+					if (sum != 0) {
+						(*this)[ind] /= (a - b*sum); 
+					}
 				}
 			}
 		}
@@ -563,6 +602,25 @@ void Scalar::transform(int DIR) {
 	upcxx::delete_array(tmp[upcxx::rank_me()]);
 
 	upcxx::barrier(); 
+
+	// for (int k=0; k<m_dims[2]; k++) {
+	// 	for (int j=0; j<m_dims[1]; j++) {
+	// 		m_fft_x.transform(m_local+m_dims[0]*j+m_dims[0]*m_dims[1]*k, DIR); 
+	// 	}
+	// }
+
+	// for (int k=0; k<m_dims[2]; k++) {
+	// 	for (int i=0; i<m_dims[0]; i++) {
+	// 		m_fft_y.transform(m_local+i+k*m_dims[0]*m_dims[1], DIR); 
+	// 	}
+	// }
+
+	// for (int j=0; j<m_dims[1]; j++) {
+	// 	for (int i=0; i<m_dims[0]; i++) {
+	// 		m_fft_z.transform(m_local+i+j*m_dims[1], DIR); 
+	// 	}
+	// }
+
 }
 
 void Scalar::transposeX2Z(cdouble* f) {
@@ -602,6 +660,7 @@ void Scalar::transposeZ2X(cdouble* f) {
 void Scalar::getIndex(array<INT,DIM> index, INT& rank, INT& loc) const {
 	INT n = index[0] + m_dims[0]*index[1] + index[2]*m_dims[0]*m_dims[1]; 
 	if (n >= m_N) {
+		cout << n << endl; 
 		ERROR("indexing out of full dimensions"); 
 	}
 	rank = n/m_dSize; // which rank owns the data 

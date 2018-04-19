@@ -28,8 +28,12 @@ public:
 	/** can only access local values **/ 
 	cdouble& operator[](array<INT,DIM> index); 
 	/// const access to distributed array 
-	/** uses rget for non-local data **/ 
+	/** can only access local values **/ 
 	cdouble operator[](array<INT,DIM> index) const; 
+	/// get a local element from the distributed array (with 3D indexing) 
+	cdouble& operator()(INT a_i, INT a_j, INT a_k); 
+	/// const access to a local element (with 3D indexing) 
+	cdouble operator()(INT a_i, INT a_j, INT a_k) const; 
 	/// direct access to local pointer 
 	cdouble& operator[](INT index); 
 	/// const access to local pointer 
@@ -46,9 +50,6 @@ public:
 	void forward(Scalar& a_scalar) const; 
 	/// out of place reverse transform 
 	void inverse(Scalar& a_scalar) const; 
-
-	/// element wise addition with another Scalar 
-	void add(Scalar& a); 
 
 	/// compute gradient \f$ \nabla f \f$. Returns in fourier space 
 	Vector gradient() const; 
@@ -86,6 +87,9 @@ public:
 	void setFourier(); 
 	/// flag (*this) as in physical space 
 	void setPhysical(); 
+
+	/// get the average value of the data 
+	double average() const; 
 private:
 	/// perform fourier transform in parallel 
 	void transform(int dir); 
@@ -114,8 +118,6 @@ private:
 	vector<upcxx::global_ptr<cdouble>> m_ptrs; 
 	/// local version of m_ptrs[rank_me()] 
 	cdouble* m_local; 
-	/// object for 1D ffts 
-	FFT1D m_fft; 
 	/// fft for striding in x 
 	FFT1D m_fft_x; 
 	/// fft for striding in y 
