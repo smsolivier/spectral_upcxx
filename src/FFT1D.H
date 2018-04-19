@@ -11,7 +11,8 @@
 using namespace std; 
 
 typedef complex<double> cdouble; 
-typedef uint64_t INT; 
+typedef uint64_t INT;
+// typedef int INT; 
 
 /// do FFT in 1 dimension 
 class FFT1D {

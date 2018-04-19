@@ -6,6 +6,11 @@ FFT1D::FFT1D() {
 	m_backward = NULL; 
 }
 
+FFT1D::~FFT1D() {
+	if (m_forward != NULL) fftw_destroy_plan(m_forward); 
+	if (m_backward != NULL) fftw_destroy_plan(m_backward); 
+}
+
 void FFT1D::init(int N, int stride, cdouble* input) {
 	m_N = N; 
 	m_stride = stride; 
@@ -46,11 +51,6 @@ void FFT1D::init(int N, int stride, cdouble* input) {
 		measure // FFTW flags 
 		);
 	m_alignment = fftw_alignment_of((double*)in); 
-}
-
-FFT1D::~FFT1D() {
-	if (m_forward != NULL) fftw_destroy_plan(m_forward); 
-	if (m_backward != NULL) fftw_destroy_plan(m_backward); 
 }
 
 void FFT1D::forward(cdouble* input, int N, int stride) {
