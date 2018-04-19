@@ -13,7 +13,7 @@ class Writer {
 public:
 	/// constructor. provide base name of output VTK file 
 	/** actual name will be name+upcxx::rank_me()_step#.vtk **/ 
-	Writer(string name); 
+	Writer(string name="solution"); 
 	/// destructor. cleans up fstream 
 	~Writer(); 
 	/// add a Scalar to the output list 
