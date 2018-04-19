@@ -34,7 +34,6 @@ Scalar::Scalar(array<INT,DIM> N, bool physical) {
 }
 
 Scalar::~Scalar() {
-	CH_TIMERS("destructor"); 
 	if (m_initialized) {
 		upcxx::delete_array(m_ptrs[upcxx::rank_me()]);
 
@@ -47,7 +46,6 @@ Scalar::~Scalar() {
 }
 
 Scalar::Scalar(const Scalar& scalar) {
-	CH_TIMERS("copy constructor"); 
 	init(scalar.getDims(), scalar.isPhysical()); 
 
 	// memcpy local data 
@@ -55,7 +53,6 @@ Scalar::Scalar(const Scalar& scalar) {
 }
 
 void Scalar::operator=(const Scalar& scalar) {
-	CH_TIMERS("copy assignment"); 
 	if (!m_initialized) {
 		init(scalar.getDims(), scalar.isPhysical()); 
 	}
@@ -65,7 +62,6 @@ void Scalar::operator=(const Scalar& scalar) {
 }
 
 void Scalar::init(array<INT,DIM> N, bool physical) {
-	CH_TIMERS("init"); 
 	m_initialized = true; 
 	m_nscalars++; 
 
@@ -101,13 +97,10 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 	upcxx::barrier(); 
 
 	// setup FFTW plans 
-	{
-		CH_TIMERS("setup FFTW plans"); 
-		m_fft_x.init(m_dims[0], 1, m_local); 
-		m_fft_y.init(m_dims[1], m_dims[0], m_local); 
-		// needs to by Ny 
-		m_fft_z.init(m_dims[2], m_dims[0]*m_Ny, m_local); 
-	}
+	m_fft_x.init(m_dims[0], 1, m_local); 
+	m_fft_y.init(m_dims[1], m_dims[0], m_local); 
+	// needs to by Ny 
+	m_fft_z.init(m_dims[2], m_dims[0]*m_Ny, m_local); 
 
 	if (physical) setPhysical(); 
 	else setFourier(); 
@@ -299,7 +292,6 @@ Scalar Scalar::laplacian() const {
 void Scalar::laplacian_inverse(double a, double b) {
 	CH_TIMERS("laplacian inverse"); 
 	
-
 	#pragma omp parallel 
 	{
 		array<INT,DIM> start = getPStart(); 
@@ -388,6 +380,8 @@ bool Scalar::isFourier() const {return m_fourier; }
 
 void Scalar::transform(int DIR) {
 	CH_TIMERS("transform"); 
+	CH_TIMER("setup tmp", ttmp); 
+	CH_START(ttmp); 
 	// store transposed data in tmp 
 	vector<upcxx::global_ptr<cdouble>> tmp(upcxx::rank_n(), NULL);
 	// allocate global memory 
@@ -398,6 +392,8 @@ void Scalar::transform(int DIR) {
 	}
 	// get local access 
 	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
+	upcxx::barrier(); 
+	CH_STOP(ttmp); 
 
 	// --- transform columns --- 
 #ifdef OMP 
@@ -421,8 +417,6 @@ void Scalar::transform(int DIR) {
 	for (INT k=0; k<m_Nz; k++) {
 		for (INT i=0; i<m_dims[0]; i++) {
 			cdouble* start = m_local + i + k*m_dims[0]*m_dims[1]; 
-			// m_fft.transform(start, 
-				// m_dims[1], m_dims[0], DIR); 
 			m_fft_y.transform(start, DIR); 
 		}
 	}
