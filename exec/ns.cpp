@@ -3,11 +3,24 @@
 #include <upcxx/upcxx.hpp> 
 #include "Timer.H"
 #include "CH_Timer.H"
+#include "Particle.H"
+#include <fstream> 
 
 using namespace std; 
 
 double gaussian(double x, double y, double xc, double yc, double width) {
 	return exp(-pow(x - xc,2)/width)*exp(-pow(y-yc,2)/width); 
+}
+
+void writeParticles(vector<Particle>& parts, int t) {
+	ofstream out("p"+to_string(t)+".3D"); 
+	out << "x y z E" << endl; 
+	for (int i=0; i<parts.size(); i++) {
+		array<double,DIM> pos = parts[i].position(); 
+		out << pos[0] << " " << pos[1] << " " 
+			<< pos[2] << " " << parts[i].energy() << endl; 
+	}
+	out.close(); 
 }
 
 int main(int argc, char* argv[]) {
@@ -17,15 +30,16 @@ int main(int argc, char* argv[]) {
 	if (argc > 1) N = atoi(argv[1]); 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	double T = 6; // end time 
+	double T = 12; // end time 
 	double K = .001; // time step 
 	INT Nt = T/K; // number of time steps 
 	double nu = .001; // viscosity 
 	int NSAVES = 300; 
+	int mod = Nt/NSAVES; 
 
 	// create a writer 
 	Writer writer; 
-	writer.setFreq(Nt/NSAVES); 
+	writer.setFreq(mod); 
 
 	// initialize variables 
 	// vorticities 
@@ -130,8 +144,12 @@ int main(int argc, char* argv[]) {
 	Vector cross1; 
 	Vector lap1; 
 
+	int Np = 10000; 
+	vector<Particle> parts(Np); 
+
 	upcxx::barrier(); 
 
+	int n = 0; 
 	// do time stepping 
 	for (int t=1; t<Nt+1; t++) {
 
@@ -155,6 +173,17 @@ int main(int argc, char* argv[]) {
 			V[d].laplacian_inverse(1, -nu*K/2); 
 		}
 
+		Vector vtmp; 
+		V.inverse(vtmp); 
+		{
+			CH_TIMERS("move particles"); 
+			#pragma omp parallel for 
+			for (int i=0; i<Np; i++) {
+				upcxx::default_persona_scope();
+				parts[i].move(vtmp, K); 
+			}
+		}
+
 		// compute vorticity 
 		omega = V.curl(); 
 
@@ -171,6 +200,10 @@ int main(int argc, char* argv[]) {
 
 		// write to VTK 
 		writer.write(); 
+
+		if ((t-1) % mod == 0) {
+			writeParticles(parts, n++); 	
+		}
 
 		cout << t*K/T << "\r"; 
 		cout.flush(); 
