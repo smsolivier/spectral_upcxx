@@ -28,7 +28,7 @@ public:
 
 	/// cross product of two vectors (\f$ (*this) \times a_v\f$) 
 	/** does cross product in physical space. returns in fourier space **/ 
-	Vector cross(Vector& a_v) const; 
+	Vector cross(const Vector& a_v) const; 
 	/// curl \f$ \nabla \times \vec{f} \f$ 
 	Vector curl() const; 
 
@@ -41,6 +41,9 @@ public:
 	bool isFourier() const; 
 	/// query if (*this) is in physical space 
 	bool isPhysical() const; 
+
+	/// number of elements local to this processor 
+	INT localSize() const; 
 
 	/// get full dimensions 
 	array<INT,DIM> getDims() const; 

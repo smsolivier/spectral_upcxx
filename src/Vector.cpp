@@ -63,23 +63,24 @@ void Vector::inverse(Vector& a_vector) const {
 	a_vector.inverse(); 
 }
 
-Vector Vector::cross(Vector& a_v) const {
+Vector Vector::cross(const Vector& a_v) const {
 	CH_TIMERS("cross product"); 
 	if (isPhysical() || a_v.isPhysical()) {
 		ERROR("must start in fourier space"); 
 	} 
 
 	// make copies and transform to physical space 
-	Vector v1 = (*this); 
-	Vector v2 = a_v; 
-	v1.inverse(); 
-	v2.inverse(); 
+	Vector u; 
+	Vector v; 
+	inverse(u); 
+	a_v.inverse(v);  
 
 	Vector ret(m_dims, true);
-	for (int i=0; i<v1[0].localSize(); i++) {
-		ret[0][i] = v1[1][i]*v2[2][i] - v1[2][i]*v2[1][i]; 
-		ret[1][i] = v1[2][i]*v2[0][i] - v1[0][i]*v2[2][i]; 
-		ret[2][i] = v1[0][i]*v2[1][i] - v1[1][i]*v2[0][i]; 
+	#pragma omp parallel for 
+	for (int i=0; i<u[0].localSize(); i++) {
+		ret[0][i] = u[1][i]*v[2][i] - u[2][i]*v[1][i]; 
+		ret[1][i] = u[2][i]*v[0][i] - u[0][i]*v[2][i]; 
+		ret[2][i] = u[0][i]*v[1][i] - u[1][i]*v[0][i]; 
 	} 
 
 	// transform to fourier space 
@@ -92,17 +93,30 @@ Vector Vector::curl() const {
 	CH_TIMERS("curl"); 
 	if (!isFourier()) ERROR("must start in fourier space"); 
 
-	Vector x = (*this)[0].gradient(); 
-	Vector y = (*this)[1].gradient(); 
-	Vector z = (*this)[2].gradient(); 
-	Vector curl(m_dims, false); 
-
-	for (int i=0; i<m_vector[0].localSize(); i++) {
-		curl[0][i] = z[1][i] - y[2][i]; 
-		curl[1][i] = x[2][i] - z[0][i]; 
-		curl[2][i] = y[0][i] - x[1][i]; 
+	Vector curl(m_dims, false);  
+	#pragma omp parallel 
+	{
+		array<INT,DIM> start = getPStart(); 
+		array<INT,DIM> end = getPEnd(); 
+		array<INT,DIM> ind = {0,0,0}; 
+		array<double,DIM> f; 
+		cdouble imag(0,1.); 
+		for (INT k=start[2]; k<end[2]; k++) {
+			for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
+				for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
+					ind[2] = k; 
+					f = m_vector[0].freq(ind); 
+					curl[0][ind] = imag*f[1]*(*this)[2][ind] 
+						- imag*f[2]*(*this)[1][ind]; 
+					curl[1][ind] = imag*f[2]*(*this)[0][ind] - 
+						imag*f[0]*(*this)[2][ind]; 
+					curl[2][ind] = imag*f[0]*(*this)[1][ind] - 
+						imag*f[1]*(*this)[0][ind]; 
+				}
+			}
+		}
 	}
-
+	
 	return curl; 
 }
 
@@ -113,18 +127,23 @@ Scalar Vector::divergence() const {
 	// return scalar in fourier space 
 	Scalar div(m_dims, false); 
 
-	array<INT,DIM> i = {0,0,0}; 
-	array<INT,DIM> start = m_vector[0].getPStart(); 
-	array<INT,DIM> end = m_vector[0].getPEnd(); 
-	array<double,DIM> k; 
-	cdouble imag(0,1.); 
-	for (i[2]=start[2]; i[2]<end[2]; i[2]++) {
-		for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
-			for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
-				k = m_vector[0].freq(i); 
-				div[i] = 0; 
-				for (int d=0; d<DIM; d++) {
-					div[i] += imag*k[d]*(*this)[d][i]; 
+	#pragma omp parallel 
+	{
+		array<INT,DIM> i = {0,0,0}; 
+		const array<INT,DIM> start = m_vector[0].getPStart(); 
+		const array<INT,DIM> end = m_vector[0].getPEnd(); 
+		array<double,DIM> f; 
+		cdouble imag(0,1.); 
+		#pragma omp for
+		for (INT k=start[2]; k<end[2]; k++) {
+			for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
+				for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
+					i[2] = k; 
+					f = m_vector[0].freq(i); 
+					div[i] = 0; 
+					for (int d=0; d<DIM; d++) {
+						div[i] += imag*f[d]*(*this)[d][i]; 
+					}
 				}
 			}
 		}
@@ -137,16 +156,22 @@ Vector Vector::laplacian() const {
 	if (!isFourier()) ERROR("must start in fourier space"); 
 
 	Vector lap(m_dims, false); 
-	array<INT,DIM> i = {0,0,0}; 
-	array<INT,DIM> start = m_vector[0].getPStart(); 
-	array<INT,DIM> end = m_vector[0].getPEnd(); 
-	array<double,DIM> k; 
-	for (i[2]=start[2]; i[2]<end[2]; i[2]++) {
-		for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
-			for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
-				k = m_vector[0].freq(i); 
-				for (int d=0; d<DIM; d++) {
-					lap[d][i] = -(k[0]*k[0]+k[1]*k[1]+k[2]*k[2])*(*this)[d][i]; 
+	
+	#pragma omp parallel
+	{
+		array<INT,DIM> i = {0,0,0}; 
+		array<INT,DIM> start = m_vector[0].getPStart(); 
+		array<INT,DIM> end = m_vector[0].getPEnd(); 
+		array<double,DIM> f; 
+		#pragma omp parallel for 
+		for (INT k=start[2]; k<end[2]; k++) {
+			for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
+				for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
+					i[2] = k; 
+					f = m_vector[0].freq(i); 
+					for (int d=0; d<DIM; d++) {
+						lap[d][i] = -(f[0]*f[0]+f[1]*f[1]+f[2]*f[2])*(*this)[d][i]; 
+					}
 				}
 			}
 		}
@@ -170,13 +195,7 @@ bool Vector::isPhysical() const {
 	return false; 
 }
 
-// array<cdouble*,DIM> Vector::getLocal() {
-// 	array<cdouble*,DIM> ret; 
-// 	for (int i=0; i<DIM; i++) {
-// 		ret[i] = m_vector[i].getLocal(); 
-// 	}
-// 	return ret; 
-// }
+INT Vector::localSize() const {return m_vector[0].localSize(); }
 
 array<INT,DIM> Vector::getDims() const {return m_vector[0].getDims(); }
 array<INT,DIM> Vector::getPDims() const {return m_vector[0].getPDims(); }
