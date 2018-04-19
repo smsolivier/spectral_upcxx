@@ -77,12 +77,12 @@ int main(int argc, char* argv[]) {
 			double y = h[1]*ind[1]; 
 			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
 				double x = h[0]*ind[0]; 
-				omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI,width) +
-					mag*gaussian(x,y,M_PI+dist,M_PI,width); 
+				// omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI,width) +
+					// mag*gaussian(x,y,M_PI+dist,M_PI,width); 
 				// omega0[2][ind] = mag*gaussian(x,y,M_PI,M_PI, width); 
-				// omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI-dist,width) + 
-					// mag*gaussian(x,y,M_PI+dist,M_PI-dist,width) - 
-					// mag*gaussian(x,y,M_PI,M_PI+dist,width); 
+				omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI-dist,width) + 
+					mag*gaussian(x,y,M_PI+dist,M_PI-dist,width) + 
+					mag*gaussian(x,y,M_PI,M_PI+dist,width); 
 			}
 		}
 	}
@@ -122,22 +122,35 @@ int main(int argc, char* argv[]) {
 	// compute G = dt/2*(3Pi1 - Pi0) 
 	G = K/2*(3*Pi1 - Pi0); 
 
+	// store AB2 cross product combination 
+	Vector F; 
+
+	// store previous time steps cross product 
+	Vector cross0 = V0.cross(omega0); 
+	Vector cross1; 
+	Vector lap1; 
+
 	upcxx::barrier(); 
 
 	// do time stepping 
 	for (int t=1; t<Nt+1; t++) {
 
-		// compute Pi 
-		G = (V1 + nu*K/2*V1.laplacian() + 
-			K/2*(3*V1.cross(omega1) - V0.cross(omega0))).divergence(); 
+		// compute cross products 
+		cross1 = V1.cross(omega1); 
+		F = K/2*(3.*cross1 - cross0); 
+
+		// compute laplacian of V1 (its used twice) 
+		lap1 = nu*K/2*V1.laplacian(); 
+
+		// compute G 
+		G = (V1 + lap1 + F).divergence(); 
 		G.laplacian_inverse(); 
 
 		// AB2 step 
-		Vhalf = V1 + K/2*(3.*V1.cross(omega1) - V0.cross(omega0)) 
-			- G.gradient();
+		Vhalf = V1 + F - G.gradient();
 
 		// CN step 
-		V = Vhalf + nu*K/2*V1.laplacian(); 
+		V = Vhalf + lap1; 
 		for (int d=0; d<DIM; d++) {
 			V[d].laplacian_inverse(1, -nu*K/2); 
 		}
@@ -154,6 +167,7 @@ int main(int argc, char* argv[]) {
 		V1 = V; 
 		omega0 = omega1; 
 		omega1 = omega; 
+		cross0 = cross1; 
 
 		// write to VTK 
 		writer.write(); 
