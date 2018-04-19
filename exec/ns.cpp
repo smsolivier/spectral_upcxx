@@ -2,6 +2,7 @@
 #include "Writer.H"
 #include <upcxx/upcxx.hpp> 
 #include "Timer.H"
+#include "CH_Timer.H"
 
 using namespace std; 
 
@@ -12,7 +13,7 @@ double gaussian(double x, double y, double xc, double yc, double width) {
 int main(int argc, char* argv[]) {
 	upcxx::init(); 
 	START_WTIMER(); 
-	INT N = 32; 
+	INT N = 16; 
 	if (argc > 1) N = atoi(argv[1]); 
 	array<INT,DIM> dims = {N, N, N}; 
 
@@ -20,10 +21,11 @@ int main(int argc, char* argv[]) {
 	double K = .001; // time step 
 	INT Nt = T/K; // number of time steps 
 	double nu = .001; // viscosity 
+	int NSAVES = 300; 
 
 	// create a writer 
-	Writer writer("solution"); 
-	writer.setFreq(20); 
+	Writer writer; 
+	writer.setFreq(Nt/NSAVES); 
 
 	// initialize variables 
 	// vorticities 
@@ -39,16 +41,16 @@ int main(int argc, char* argv[]) {
 	// pressure 
 	Scalar Pi0(dims, false); 
 	Scalar Pi1(dims, false); 
-	Scalar Pi(dims, false); 
+	Scalar G(dims, false); // AB2 combination of Pi0 and Pi1 
 
 	// divergence 
 	Scalar div(dims, false); 
 
 	// track variables in writer 
-	writer.add(omega, "omega"); 
+	writer.add(omega, "vorticity"); 
 	writer.add(V, "velocity"); 
-	writer.add(Pi, "Pi"); 
-	writer.add(div, "divergence"); 
+	writer.add(G, "G"); 
+	writer.add(div, "div"); 
 
 	upcxx::barrier(); 
 	div.memory(); 
@@ -75,8 +77,12 @@ int main(int argc, char* argv[]) {
 			double y = h[1]*ind[1]; 
 			for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
 				double x = h[0]*ind[0]; 
-				omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI,width) + 
+				omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI,width) +
 					mag*gaussian(x,y,M_PI+dist,M_PI,width); 
+				// omega0[2][ind] = mag*gaussian(x,y,M_PI,M_PI, width); 
+				// omega0[2][ind] = mag*gaussian(x,y,M_PI-dist,M_PI-dist,width) + 
+					// mag*gaussian(x,y,M_PI+dist,M_PI-dist,width) - 
+					// mag*gaussian(x,y,M_PI,M_PI+dist,width); 
 			}
 		}
 	}
@@ -104,7 +110,7 @@ int main(int argc, char* argv[]) {
 	Pi0.laplacian_inverse(); 
 
 	// first time step with Forward Euler 
-	V1 = V0 + K*(V0.cross(omega0) + nu*V0.laplacian() - Pi0.gradient()); 
+	V1 = V0 + K*(V0.cross(omega0) + nu*V0.laplacian() - Pi0.gradient());
 
 	// compute omega1 = curl(V1) 
 	omega1 = V1.curl(); 
@@ -113,11 +119,22 @@ int main(int argc, char* argv[]) {
 	Pi1 = (V1.cross(omega1) + nu*V1.laplacian()).divergence(); 
 	Pi1.laplacian_inverse(); 
 
+	// compute G = dt/2*(3Pi1 - Pi0) 
+	G = K/2*(3*Pi1 - Pi0); 
+
+	upcxx::barrier(); 
+
 	// do time stepping 
 	for (int t=1; t<Nt+1; t++) {
+
+		// compute Pi 
+		G = (V1 + nu*K/2*V1.laplacian() + 
+			K/2*(3*V1.cross(omega1) - V0.cross(omega0))).divergence(); 
+		G.laplacian_inverse(); 
+
 		// AB2 step 
 		Vhalf = V1 + K/2*(3.*V1.cross(omega1) - V0.cross(omega0)) 
-			- K/2*(3.*Pi1.gradient() - Pi0.gradient()); 
+			- G.gradient();
 
 		// CN step 
 		V = Vhalf + nu*K/2*V1.laplacian(); 
@@ -128,20 +145,15 @@ int main(int argc, char* argv[]) {
 		// compute vorticity 
 		omega = V.curl(); 
 
-		// compute Pi 
-		Pi = (V.cross(omega) + nu*V.laplacian()).divergence(); 
-		Pi.laplacian_inverse(); 
-
 		// compute divergence 
 		div = V.divergence(); 
+		if (div.average() > 1e-12) cout << "avg div = " << div.average() << endl; 
 
 		// save histories 
 		V0 = V1; 
 		V1 = V; 
 		omega0 = omega1; 
 		omega1 = omega; 
-		Pi0 = Pi1; 
-		Pi1 = Pi; 
 
 		// write to VTK 
 		writer.write(); 
@@ -150,5 +162,6 @@ int main(int argc, char* argv[]) {
 		cout.flush(); 
 	}
 
+	CH_TIMER_REPORT();
 	upcxx::finalize();
 }

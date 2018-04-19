@@ -8,27 +8,32 @@ using namespace std;
 int main(int argc, char* argv[]) {
 	upcxx::init(); 
 	INT N = 64; 
-	int nruns = 1; 
+	int nruns = 200; 
 	if (argc > 1) N = atoi(argv[1]); 
 
 	int mrank = upcxx::rank_me(); 
 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	Scalar s(dims); 
-	Scalar ans(dims); 
-	s.memory(); 
+	// Scalar s(dims); 
+	// Scalar ans(dims); 
+	Vector v(dims); 
+	Vector ans(dims); 
+	v[0].memory(); 
 
-	double min = 100000.;  
-	for (int i=0; i<s.localSize(); i++) {
-		s[i] = (double)rand()/RAND_MAX; 
-		ans[i] = s[i]; 
+	for (int i=0; i<v.localSize(); i++) {
+		for (int d=0; d<DIM; d++) {
+			v[d][i] = (double)rand()/RAND_MAX; 
+			ans[d][i] = v[d][i]; 			
+		}
 	}
 
 	upcxx::barrier(); 
 
-	s.forward(); 
-	s.inverse(); 
+	for (int i=0; i<nruns; i++) {
+		v.forward(); 
+		v.inverse(); 		
+	}
 
 	upcxx::barrier(); 
 
@@ -37,8 +42,10 @@ int main(int argc, char* argv[]) {
 	if (mrank == 0) wrong_ptr = upcxx::new_array<bool>(upcxx::rank_n()); 
 	wrong_ptr = upcxx::broadcast(wrong_ptr, 0).wait(); 
 	bool wrong = false; 
-	for (int i=0; i<s.localSize(); i++) {
-		if (abs(s[i] - ans[i]) > 1e-3) wrong = true; 
+	for (int i=0; i<v.localSize(); i++) {
+		for (int d=0; d<DIM; d++) {
+			if (abs(v[d][i] - ans[d][i]) > 1e-3) wrong = true; 			
+		}
 	}
 	upcxx::rput(wrong, wrong_ptr+mrank).wait(); 
 	upcxx::barrier(); 
