@@ -21,7 +21,7 @@ void Particle::move(const Vector& velocity, double K) {
 		rd[d] = (m_loc[d] - ind[d]*h[d])/h[d]; 
 	}
 
-	// linear interpolation 
+	// trilinear interpolation 
 	for (int d=0; d<DIM; d++) {
 		m_v[d] = velocity[d][ind].real()*(1-rd[0])*(1-rd[1])*(1-rd[2]) +
 			velocity[d][{ind[0]+1,ind[1],ind[2]}].real()*rd[0]*(1-rd[1])*(1-rd[2]) +
@@ -35,6 +35,8 @@ void Particle::move(const Vector& velocity, double K) {
 
 	for (int d=0; d<DIM; d++) {
 		m_loc[d] += m_v[d]*K; 
+
+		// periodic BCs (return on other side with same velocity) 
 		if (m_loc[d] >= 2*M_PI) {
 			m_loc[d] = m_loc[d] - 2*M_PI;  
 		} else if (m_loc[d] <= 0) {
