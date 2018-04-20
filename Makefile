@@ -63,6 +63,11 @@ ifndef TIMER
 CFLAGS += -DCH_NTIMER
 endif
 
+# compute with tracer particles 
+ifdef PARTICLES 
+CFLAGS += -DPARTICLES
+endif 
+
 # FFTW setup 
 FFTW_INC = -I$(FFTW_HOME)/include 
 FFTW_LIB = -L$(FFTW_HOME)/lib -lfftw3 
