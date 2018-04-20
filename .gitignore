@@ -7,3 +7,4 @@ dep/
 *~
 /docs/doxygen
 time.table.*
+*.3D
