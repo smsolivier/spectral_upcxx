@@ -431,6 +431,7 @@ void Scalar::transform(int DIR) {
 	CH_TIMER("rows (slabs)", row); 
 	CH_START(row); 
 	// do each face in parallel and then serially send the whole face off (message size = Nx * Ny/p)
+	upcxx::future<> fut = upcxx::make_future(); 
 	for (INT k=0; k<m_Nz; k++) {
 		#pragma omp parallel for 
 		for (INT j=0; j<m_dims[1]; j++) {
@@ -440,15 +441,17 @@ void Scalar::transform(int DIR) {
 
 		// send slabs  
 		for (int j=0; j<upcxx::rank_n(); j++) {
-			cdouble* start = m_local + k*m_dims[0]*m_dims[1]; 
-			INT loc = upcxx::rank_me()*m_Ny*m_dims[0]*m_Nz + k*m_dims[0]*m_Ny; 
+			cdouble* start = m_local + k*m_dims[0]*m_dims[1] + j*m_dims[0]*Ny;  
+			INT loc = upcxx::rank_me()*Ny*m_dims[0]*m_Nz + k*m_dims[0]*Ny; 
 			if (j == upcxx::rank_me()) {
 				memcpy(tlocal+loc, start, m_dims[0]*m_Ny*sizeof(cdouble)); 
 			} else {
-				upcxx::rput(start, tmp[j]+loc, m_dims[0]*m_Ny);			
+				fut = upcxx::when_all(fut, 
+					upcxx::rput(start, tmp[j]+loc, m_dims[0]*Ny)); 
 			}
 		}
 	}
+	fut.wait(); 
 	CH_STOP(row); 
 #elif defined PENCILS & defined OMP 
 	CH_TIMER("rows (OMP pencils)", row); 
