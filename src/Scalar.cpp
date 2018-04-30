@@ -399,7 +399,7 @@ void Scalar::transform(int DIR) {
 #ifdef OMP 
 	CH_TIMER("columns (OMP)", col); 
 	CH_START(col); 
-	#pragma omp parallel 
+	#pragma omp parallel
 	{
 		#pragma omp for 
 		for (INT k=0; k<m_Nz; k++) {
@@ -410,7 +410,6 @@ void Scalar::transform(int DIR) {
 		}
 	}
 	CH_STOP(col); 
-
 #else
 	CH_TIMER("columns (serial)", col); 
 	CH_START(col); 
@@ -423,7 +422,7 @@ void Scalar::transform(int DIR) {
 	CH_STOP(col); 
 #endif
 
-	upcxx::barrier(); 
+	// upcxx::barrier(); 
 
 	// --- transforms rows and pencil transpose --- 
 	INT Ny = m_dims[1]/upcxx::rank_n(); 
@@ -596,9 +595,11 @@ void Scalar::transform(int DIR) {
 	CH_STOP(trans); 
 #endif
 
+	CH_TIMER("clean up", clean); 
+	CH_START(clean); 
 	upcxx::delete_array(tmp[upcxx::rank_me()]);
-
-	upcxx::barrier(); 
+	upcxx::barrier();
+	CH_STOP(clean);  
 
 	// for (int k=0; k<m_dims[2]; k++) {
 	// 	for (int j=0; j<m_dims[1]; j++) {
