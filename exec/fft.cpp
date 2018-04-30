@@ -2,24 +2,28 @@
 #include <upcxx/upcxx.hpp> 
 #include <chrono> 
 #include "CH_Timer.H"
+#include "Writer.H"
 
 using namespace std; 
 
 int main(int argc, char* argv[]) {
 	upcxx::init(); 
+#ifdef ZERO 
+	cout << "WARNING: FFT will be wrong if ZERO is defined" << endl; 
+#endif
 	INT N = 64; 
-	int nruns = 200; 
+	int nruns = 10; 
 	if (argc > 1) N = atoi(argv[1]); 
 
 	int mrank = upcxx::rank_me(); 
 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	// Scalar s(dims); 
-	// Scalar ans(dims); 
 	Vector v(dims); 
 	Vector ans(dims); 
 	v[0].memory(); 
+	Writer writer; 
+	writer.add(v, "V"); 
 
 	for (int i=0; i<v.localSize(); i++) {
 		for (int d=0; d<DIM; d++) {
@@ -58,6 +62,15 @@ int main(int argc, char* argv[]) {
 		if (wrong_global) cout << "WRONG!" << endl; 
 		else cout << "my man!" << endl; 
 	}
+
+	// compute error 
+	for (int d=0; d<DIM; d++) {
+		for (int i=0; i<v.localSize(); i++) {
+			v[d][i] = abs(ans[d][i] - v[d][i]); 
+		}
+	}
+
+	writer.write(); 
 
 	CH_TIMER_REPORT(); 
 
