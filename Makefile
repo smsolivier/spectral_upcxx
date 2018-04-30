@@ -59,7 +59,7 @@ CFLAGS += -DTRANSPOSE
 endif
 
 # enable CH_Timer 
-ifndef TIMER 
+ifdef CH_NTIMER 
 CFLAGS += -DCH_NTIMER
 endif
 
@@ -69,7 +69,7 @@ CFLAGS += -DPARTICLES
 endif
 
 # write to VTK 
-ifndef WRITE 
+ifdef NWRITE 
 CFLAGS += -DNWRITE 
 endif 
 
