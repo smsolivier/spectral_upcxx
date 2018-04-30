@@ -66,6 +66,11 @@ endif
 # compute with tracer particles 
 ifdef PARTICLES 
 CFLAGS += -DPARTICLES
+endif
+
+# write to VTK 
+ifndef WRITE 
+CFLAGS += -DNWRITE 
 endif 
 
 # FFTW setup 
