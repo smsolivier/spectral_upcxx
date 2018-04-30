@@ -30,15 +30,17 @@ int main(int argc, char* argv[]) {
 	cout << "WARNING: unstable if ZERO is not defined" << endl; 
 #endif
 	int nthreads = 1; 
+#ifdef OMP 
 	#pragma omp parallel 
 	{
 		nthreads = omp_get_num_threads(); 
 	}
+#endif
 	INT N = 16; 
 	if (argc > 1) N = atoi(argv[1]); 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	double T = 1; // end time 
+	double T = .1; // end time 
 	double K = .001; // time step 
 	INT Nt = T/K; // number of time steps 
 	double nu = .001; // viscosity 
