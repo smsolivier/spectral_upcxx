@@ -1,10 +1,11 @@
 #include "DataObjects.H"
 #include "Writer.H"
 #include <upcxx/upcxx.hpp> 
-#include "Timer.H"
 #include "CH_Timer.H"
 #include "Particle.H"
 #include <fstream> 
+#include <chrono> 
+#include <omp.h>
 
 using namespace std; 
 
@@ -25,12 +26,19 @@ void writeParticles(vector<Particle>& parts, int t) {
 
 int main(int argc, char* argv[]) {
 	upcxx::init(); 
-	START_WTIMER(); 
+#ifndef ZERO 
+	cout << "WARNING: unstable if ZERO is not defined" << endl; 
+#endif
+	int nthreads = 1; 
+	#pragma omp parallel 
+	{
+		nthreads = omp_get_num_threads(); 
+	}
 	INT N = 16; 
 	if (argc > 1) N = atoi(argv[1]); 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	double T = 12; // end time 
+	double T = 1; // end time 
 	double K = .001; // time step 
 	INT Nt = T/K; // number of time steps 
 	double nu = .001; // viscosity 
@@ -67,7 +75,7 @@ int main(int argc, char* argv[]) {
 	writer.add(div, "div"); 
 
 	upcxx::barrier(); 
-	div.memory(); 
+	// div.memory(); 
 
 	// start indices 
 	array<INT,DIM> start = omega0.getPStart(); 
@@ -150,6 +158,7 @@ int main(int argc, char* argv[]) {
 	#endif
 
 	upcxx::barrier(); 
+	chrono::time_point<chrono::system_clock> timer = chrono::system_clock::now(); 
 
 	int n = 0; 
 	// do time stepping 
@@ -207,11 +216,13 @@ int main(int argc, char* argv[]) {
 
 		// write to VTK 
 		writer.write(); 
-
-		cout << t*K/T << "\r"; 
-		cout.flush(); 
 	}
 
 	CH_TIMER_REPORT();
+	chrono::duration<double> el = chrono::system_clock::now() - timer; 
+	if (upcxx::rank_me() == 0) {
+		cout << "n=" << upcxx::rank_n() << ", t=" << nthreads 
+			<< ", Wtime = " << el.count() << endl; 
+	}
 	upcxx::finalize();
 }
