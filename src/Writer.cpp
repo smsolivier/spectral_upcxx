@@ -4,6 +4,7 @@
 #include "VisitWriter.H"
 
 Writer::Writer(string name) {
+#ifndef NWRITE
 	m_name = name; 
 	m_count = 0; 
 	m_writes = 0; 
@@ -12,6 +13,7 @@ Writer::Writer(string name) {
 		m_out.open(name+".visit"); 
 		m_out << "!NBLOCKS " << upcxx::rank_n() << endl; 
 	}
+#endif
 }
 
 Writer::~Writer() {
