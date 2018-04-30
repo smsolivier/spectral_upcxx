@@ -8,3 +8,6 @@ dep/
 /docs/doxygen
 time.table.*
 *.3D
+*.stderr
+*.stdout
+*.py
