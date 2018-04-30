@@ -1,8 +1,12 @@
+#include <omp.h>
 #include "DataObjects.H"
 #include <upcxx/upcxx.hpp> 
 #include <chrono> 
 #include "CH_Timer.H"
 #include "Writer.H"
+#include <vector> 
+
+// #define CHECK
 
 using namespace std; 
 
@@ -12,44 +16,62 @@ int main(int argc, char* argv[]) {
 	cout << "WARNING: FFT will be wrong if ZERO is defined" << endl; 
 #endif
 	INT N = 64; 
-	int nruns = 10; 
+	int nruns = 15; 
 	if (argc > 1) N = atoi(argv[1]); 
 
 	int mrank = upcxx::rank_me(); 
 
 	array<INT,DIM> dims = {N, N, N}; 
 
-	Vector v(dims); 
-	Vector ans(dims); 
-	v[0].memory(); 
+	int nthreads = 0; 
+	#pragma omp parallel 
+	{
+		nthreads = omp_get_num_threads(); 
+	}
+
+	Scalar s(dims); 
+	Scalar ans(dims); 
+	// s.memory(); 
 	Writer writer; 
-	writer.add(v, "V"); 
+	writer.add(s, "s"); 
 
-	for (int i=0; i<v.localSize(); i++) {
-		for (int d=0; d<DIM; d++) {
-			v[d][i] = (double)rand()/RAND_MAX; 
-			ans[d][i] = v[d][i]; 			
-		}
+	for (int i=0; i<s.localSize(); i++) {
+		s[i] = (double)rand()/RAND_MAX; 
+		ans[i] = s[i]; 			
 	}
 
 	upcxx::barrier(); 
 
+	chrono::time_point<chrono::system_clock> start; 
+	chrono::duration<double> el; 
+	double min = std::numeric_limits<double>::max(); 
 	for (int i=0; i<nruns; i++) {
-		v.forward(); 
-		v.inverse(); 		
+		start = chrono::system_clock::now(); 
+		s.forward(); 
+		s.inverse(); 		
+		el = chrono::system_clock::now() - start; 
+		if (el.count() < min) min = el.count(); 
 	}
-
 	upcxx::barrier(); 
+
+	if (upcxx::rank_me() == 0) {
+		cout << "n=" << upcxx::rank_n() << ", t=" << nthreads 
+			<< ", min time = " << min << " seconds"; 
+			#if defined PENCILS & defined OMP 
+			cout << " (pencils)" << endl; 
+			#elif defined SLABS & defined OMP 
+			cout << " (slabs)" << endl; 
+			#endif
+	}
 
 	// check if wrong 
+#ifdef CHECK
 	upcxx::global_ptr<bool> wrong_ptr = nullptr; 
 	if (mrank == 0) wrong_ptr = upcxx::new_array<bool>(upcxx::rank_n()); 
 	wrong_ptr = upcxx::broadcast(wrong_ptr, 0).wait(); 
 	bool wrong = false; 
-	for (int i=0; i<v.localSize(); i++) {
-		for (int d=0; d<DIM; d++) {
-			if (abs(v[d][i] - ans[d][i]) > 1e-3) wrong = true; 			
-		}
+	for (int i=0; i<s.localSize(); i++) {
+		if (abs(s[i] - ans[i]) > 1e-3) wrong = true;
 	}
 	upcxx::rput(wrong, wrong_ptr+mrank).wait(); 
 	upcxx::barrier(); 
@@ -64,13 +86,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	// compute error 
-	for (int d=0; d<DIM; d++) {
-		for (int i=0; i<v.localSize(); i++) {
-			v[d][i] = abs(ans[d][i] - v[d][i]); 
-		}
+	for (int i=0; i<s.localSize(); i++) {
+		s[i] = abs(ans[i] - s[i]); 
 	}
 
 	writer.write(); 
+#endif
 
 	CH_TIMER_REPORT(); 
 
