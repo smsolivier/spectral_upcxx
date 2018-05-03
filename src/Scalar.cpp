@@ -426,7 +426,7 @@ void Scalar::transform(int DIR) {
 
 	// --- transforms rows and pencil transpose --- 
 	INT Ny = m_dims[1]/upcxx::rank_n(); 
-#if defined SLABS & defined OMP 
+#if defined SLABS
 	CH_TIMER("rows (slabs)", row); 
 	CH_START(row); 
 	// do each face in parallel and then serially send the whole face off (message size = Nx * Ny/p)
@@ -452,7 +452,7 @@ void Scalar::transform(int DIR) {
 	}
 	fut.wait(); 
 	CH_STOP(row); 
-#elif defined PENCILS & defined OMP 
+#elif defined PENCILS
 	CH_TIMER("rows (OMP pencils)", row); 
 	CH_START(row); 
 	#pragma omp parallel

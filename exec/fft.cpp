@@ -16,18 +16,21 @@ int main(int argc, char* argv[]) {
 	cout << "WARNING: FFT will be wrong if ZERO is defined" << endl; 
 #endif
 	INT N = 64; 
-	int nruns = 15; 
+	int nruns = 10; 
 	if (argc > 1) N = atoi(argv[1]); 
+	if (argc > 2) nruns = atoi(argv[2]); 
 
 	int mrank = upcxx::rank_me(); 
 
 	array<INT,DIM> dims = {N, N, N}; 
 
 	int nthreads = 0; 
+#ifdef OMP 
 	#pragma omp parallel 
 	{
 		nthreads = omp_get_num_threads(); 
 	}
+#endif
 
 	Scalar s(dims); 
 	Scalar ans(dims); 
@@ -57,10 +60,12 @@ int main(int argc, char* argv[]) {
 	if (upcxx::rank_me() == 0) {
 		cout << "n=" << upcxx::rank_n() << ", t=" << nthreads 
 			<< ", min time = " << min << " seconds"; 
-			#if defined PENCILS & defined OMP 
+			#if defined PENCILS 
 			cout << " (pencils)" << endl; 
-			#elif defined SLABS & defined OMP 
+			#elif defined SLABS 
 			cout << " (slabs)" << endl; 
+			#else 
+			cout << endl; 
 			#endif
 	}
 
