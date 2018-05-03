@@ -58,7 +58,7 @@ ifdef TRANSPOSE
 CFLAGS += -DTRANSPOSE 
 endif
 
-# enable CH_Timer 
+# disable CH_Timer 
 ifdef CH_NTIMER 
 CFLAGS += -DCH_NTIMER
 endif
@@ -68,7 +68,7 @@ ifdef PARTICLES
 CFLAGS += -DPARTICLES
 endif
 
-# write to VTK 
+# disable writer  
 ifdef NWRITE 
 CFLAGS += -DNWRITE 
 endif 
