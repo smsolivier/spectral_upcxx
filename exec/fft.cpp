@@ -6,14 +6,15 @@
 #include "Writer.H"
 #include <vector> 
 
-// #define CHECK
+#define CHECK
 
 using namespace std; 
 
 int main(int argc, char* argv[]) {
 	upcxx::init(); 
 #ifdef ZERO 
-	cout << "WARNING: FFT will be wrong if ZERO is defined" << endl; 
+	if (upcxx::rank_me() == 0) 
+		cout << "WARNING: FFT will be wrong if ZERO is defined" << endl; 
 #endif
 	INT N = 64; 
 	int nruns = 10; 
