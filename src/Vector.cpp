@@ -101,6 +101,7 @@ Vector Vector::curl() const {
 		array<INT,DIM> ind = {0,0,0}; 
 		array<double,DIM> f; 
 		cdouble imag(0,1.); 
+		#pragma omp for 
 		for (INT k=start[2]; k<end[2]; k++) {
 			for (ind[1]=start[1]; ind[1]<end[1]; ind[1]++) {
 				for (ind[0]=start[0]; ind[0]<end[0]; ind[0]++) {
@@ -163,7 +164,7 @@ Vector Vector::laplacian() const {
 		array<INT,DIM> start = m_vector[0].getPStart(); 
 		array<INT,DIM> end = m_vector[0].getPEnd(); 
 		array<double,DIM> f; 
-		#pragma omp parallel for 
+		#pragma omp for 
 		for (INT k=start[2]; k<end[2]; k++) {
 			for (i[1]=start[1]; i[1]<end[1]; i[1]++) {
 				for (i[0]=start[0]; i[0]<end[0]; i[0]++) {
