@@ -66,6 +66,7 @@ void Scalar::operator=(const Scalar& scalar) {
 }
 
 void Scalar::init(array<INT,DIM> N, bool physical) {
+	CH_TIMERS("initialize Scalar"); 
 	m_initialized = true; 
 	m_nscalars++; 
 
