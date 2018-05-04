@@ -6,7 +6,7 @@
 #include "Writer.H"
 #include <vector> 
 
-#define CHECK
+// #define CHECK
 
 using namespace std; 
 
