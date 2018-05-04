@@ -383,8 +383,11 @@ INT Scalar::size() const {return m_N; }
 cdouble* Scalar::getLocal() const {return m_local; } 
 double Scalar::memory() const {
 	if (upcxx::rank_me() == 0) {
-		cout << "memory requirement = " << 
-			(double)m_nscalars*(double)m_N*sizeof(cdouble)/1e9*2 << " GB" << endl; 
+		double mem = (double)m_nscalars*(double)m_N*sizeof(cdouble)/1e9; 
+#ifdef PREALLOCATE
+		mem *= 2; 
+#endif
+		cout << "memory requirement = " << mem << " GB" << endl; 
 	}
 }
 
