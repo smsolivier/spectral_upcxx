@@ -36,6 +36,10 @@ Scalar::Scalar(array<INT,DIM> N, bool physical) {
 Scalar::~Scalar() {
 	if (m_initialized) {
 		upcxx::delete_array(m_ptrs[upcxx::rank_me()]);
+#ifdef PREALLOCATE
+		upcxx::delete_array(tmp[upcxx::rank_me()]); 
+		tmp[upcxx::rank_me()] = nullptr; 
+#endif
 
 		m_ptrs[upcxx::rank_me()] = nullptr; 
 		m_local = nullptr; 
@@ -104,6 +108,17 @@ void Scalar::init(array<INT,DIM> N, bool physical) {
 
 	if (physical) setPhysical(); 
 	else setFourier(); 
+
+#ifdef PREALLOCATE
+	// store transposed data in tmp 
+	tmp.resize(upcxx::rank_n()); 
+	// allocate global memory 
+	tmp[upcxx::rank_me()] = upcxx::new_array<cdouble>(m_dSize);
+	// broadcast to other ranks 
+	for (int i=0; i<upcxx::rank_n(); i++) {
+		tmp[i] = upcxx::broadcast(tmp[i], i).wait(); 
+	}
+#endif
 
 	upcxx::barrier(); 
 }
@@ -369,7 +384,7 @@ cdouble* Scalar::getLocal() const {return m_local; }
 double Scalar::memory() const {
 	if (upcxx::rank_me() == 0) {
 		cout << "memory requirement = " << 
-			(double)m_nscalars*(double)m_N*sizeof(cdouble)/1e9 << " GB" << endl; 
+			(double)m_nscalars*(double)m_N*sizeof(cdouble)/1e9*2 << " GB" << endl; 
 	}
 }
 
@@ -380,6 +395,7 @@ bool Scalar::isFourier() const {return m_fourier; }
 
 void Scalar::transform(int DIR) {
 	CH_TIMERS("transform"); 
+#ifndef PREALLOCATE
 	CH_TIMER("setup tmp", ttmp); 
 	CH_START(ttmp); 
 	// store transposed data in tmp 
@@ -390,10 +406,11 @@ void Scalar::transform(int DIR) {
 	for (int i=0; i<upcxx::rank_n(); i++) {
 		tmp[i] = upcxx::broadcast(tmp[i], i).wait(); 
 	}
-	// get local access 
-	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
-	upcxx::barrier(); 
 	CH_STOP(ttmp); 
+#endif
+
+	// get local access to transpose storage 
+	cdouble* tlocal = tmp[upcxx::rank_me()].local(); 
 
 	// --- transform columns --- 
 #ifdef OMP 
@@ -510,9 +527,6 @@ void Scalar::transform(int DIR) {
 	upcxx::barrier(); 
 
 	// --- transform in z direction --- 
-#ifdef TRANSPOSE 
-	transposeX2Z(tlocal); 
-#endif
 #ifdef OMP 
 	CH_TIMER("z (OMP)", z); 
 	CH_START(z); 
@@ -522,11 +536,7 @@ void Scalar::transform(int DIR) {
 		for (INT j=0; j<Ny; j++) {
 			for (INT i=0; i<m_dims[0]; i++) {
 				cdouble* start = tlocal + i + j*m_dims[0]; 
-				#ifdef TRANSPOSE
-					m_fft_x.transform(start, DIR);
-				#else
 					m_fft_z.transform(start, DIR); 
-				#endif
 			}
 		}
 	}
@@ -595,11 +605,13 @@ void Scalar::transform(int DIR) {
 	CH_STOP(trans); 
 #endif
 
+#ifndef PREALLOCATE
 	CH_TIMER("clean up", clean); 
 	CH_START(clean); 
 	upcxx::delete_array(tmp[upcxx::rank_me()]);
+	CH_STOP(clean);
+#endif  
 	upcxx::barrier();
-	CH_STOP(clean);  
 
 	// for (int k=0; k<m_dims[2]; k++) {
 	// 	for (int j=0; j<m_dims[1]; j++) {

@@ -3,6 +3,8 @@
 
 #include "FFT1D.H"
 
+#define PREALLOCATE
+
 /// Store a 3D array with UPCXX 
 /** stores x,y locally and distributes in z **/ 
 class Scalar {
@@ -135,6 +137,11 @@ private:
 
 	/// total scalars created 
 	static int m_nscalars; 
+
+#ifdef PREALLOCATE
+	/// preallocate tmp for transpose 
+	vector<upcxx::global_ptr<cdouble>> tmp; 
+#endif
 }; 
 
 #endif
