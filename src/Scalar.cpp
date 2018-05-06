@@ -536,11 +536,19 @@ void Scalar::transform(int DIR) {
 	CH_START(z); 
 	#pragma omp parallel 
 	{
+		// #pragma omp for 
+		// for (INT j=0; j<Ny; j++) {
+			// for (INT i=0; i<m_dims[0]; i++) {
+				// cdouble* start = tlocal + i + j*m_dims[0]; 
+				// m_fft_z.transform(start, DIR); 
+			// }
+		// }
+		// larger loop body but not contiguous 
 		#pragma omp for 
-		for (INT j=0; j<Ny; j++) {
-			for (INT i=0; i<m_dims[0]; i++) {
+		for (INT i=0; i<m_dims[0]; i++) {
+			for (INT j=0; j<Ny; j++) {
 				cdouble* start = tlocal + i + j*m_dims[0]; 
-					m_fft_z.transform(start, DIR); 
+				m_fft_z.transform(start, DIR); 
 			}
 		}
 	}
